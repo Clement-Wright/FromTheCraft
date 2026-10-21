@@ -1,12 +1,36 @@
 from itertools import product
+from dataclasses import replace
 
 import numpy as np
 
-from .model import MAX_AXIS, MAX_VOLUME, Scene
+from .model import MAX_AXIS, MAX_PARTS, MAX_VOLUME, Cancelled, Scene
 
 # FtD's 24 discrete orientations, forward and up. Right = up cross forward.
-FORWARD = [(0,0,1),(1,0,0),(0,0,-1),(-1,0,0)] + [(0,-1,0)]*4 + [(0,1,0)]*4 + [(0,0,1),(1,0,0),(0,0,-1),(-1,0,0),(0,0,1),(0,0,-1),(0,0,1),(0,0,-1),(1,0,0),(-1,0,0),(1,0,0),(-1,0,0)]
-UP = [(0,1,0)]*4 + [(0,0,1),(1,0,0),(0,0,-1),(-1,0,0)]*2 + [(0,-1,0)]*4 + [(1,0,0),(1,0,0),(-1,0,0),(-1,0,0),(0,0,1),(0,0,1),(0,0,-1),(0,0,-1)]
+FORWARD = (
+    [(0, 0, 1), (1, 0, 0), (0, 0, -1), (-1, 0, 0)]
+    + [(0, -1, 0)] * 4
+    + [(0, 1, 0)] * 4
+    + [
+        (0, 0, 1),
+        (1, 0, 0),
+        (0, 0, -1),
+        (-1, 0, 0),
+        (0, 0, 1),
+        (0, 0, -1),
+        (0, 0, 1),
+        (0, 0, -1),
+        (1, 0, 0),
+        (-1, 0, 0),
+        (1, 0, 0),
+        (-1, 0, 0),
+    ]
+)
+UP = (
+    [(0, 1, 0)] * 4
+    + [(0, 0, 1), (1, 0, 0), (0, 0, -1), (-1, 0, 0)] * 2
+    + [(0, -1, 0)] * 4
+    + [(1, 0, 0), (1, 0, 0), (-1, 0, 0), (-1, 0, 0), (0, 0, 1), (0, 0, 1), (0, 0, -1), (0, 0, -1)]
+)
 
 
 def rotation(index: int) -> np.ndarray:
@@ -22,9 +46,13 @@ def quaternion(values) -> np.ndarray:
     if not np.isfinite(length) or length < 1e-8:
         raise ValueError("Invalid construct quaternion")
     x, y, z, w = np.array([x, y, z, w]) / length
-    return np.array([[1-2*(y*y+z*z), 2*(x*y-z*w), 2*(x*z+y*w)],
-                     [2*(x*y+z*w), 1-2*(x*x+z*z), 2*(y*z-x*w)],
-                     [2*(x*z-y*w), 2*(y*z+x*w), 1-2*(x*x+y*y)]])
+    return np.array(
+        [
+            [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+        ]
+    )
 
 
 def bounds(scene: Scene, scale=1):
@@ -46,14 +74,100 @@ def checked_size(size):
     return tuple(int(n) for n in size)
 
 
-def voxelize(scene: Scene, scale=1):
+def contains(shape, points):
+    x, y, z = points.T
+    inside = np.all((points >= -1e-8) & (points <= 1 + 1e-8), axis=1)
+    if shape == "wedge":
+        inside &= y <= z + 1e-8
+    elif shape == "curve":
+        inside &= y * y + (1 - z) ** 2 <= 1 + 1e-8
+    elif shape == "corner":
+        inside &= (y <= z + 1e-8) & (y <= x + 1e-8)
+    elif shape.startswith("stairs"):
+        high = z >= 0.5
+        if "inner_left" in shape:
+            high |= x >= 0.5
+        elif "inner_right" in shape:
+            high |= x <= 0.5
+        elif "outer_left" in shape:
+            high &= x >= 0.5
+        elif "outer_right" in shape:
+            high &= x <= 0.5
+        inside &= (y < 0.5) | high
+    return inside
+
+
+SAMPLES = np.array(list(product((0.25, 0.75), repeat=3)))
+
+
+def cell_shape(mask):
+    if mask.all():
+        return "box"
+    bottom = SAMPLES[:, 1] < 0.5
+    if np.array_equal(mask, bottom):
+        return "slab_bottom"
+    if np.array_equal(mask, ~bottom):
+        return "slab_top"
+    for facing, axis, positive in (
+        ("south", 2, True),
+        ("north", 2, False),
+        ("east", 0, True),
+        ("west", 0, False),
+    ):
+        high = (SAMPLES[:, axis] > 0.5) if positive else (SAMPLES[:, axis] < 0.5)
+        for half, base in (("bottom", bottom), ("top", ~bottom)):
+            if np.array_equal(mask, base | high):
+                return f"step_{facing}_{half}"
+    return "box"
+
+
+def voxelize(scene: Scene, scale=1, progress=None, cancelled=None):
     cells = {}
     low, high = bounds(scene, scale)
     origin = np.floor(low + 1e-6).astype(int)
-    checked_size(np.maximum(1, np.ceil(high-1e-6).astype(int)-origin))
-    for part in scene.parts:
-        for p in product(*[range(int(n)) for n in part.size]):
-            center = part.transform[:3, :3] @ (np.array(p)+0.5) + part.transform[:3, 3]
-            cell = tuple(np.floor(center*scale+1e-6).astype(int)-origin)
-            cells.setdefault(cell, part)
+    checked_size(np.maximum(1, np.ceil(high - 1e-6).astype(int) - origin))
+    for index, part in enumerate(scene.parts):
+        if index % 64 == 0:
+            if cancelled and cancelled():
+                raise Cancelled("Conversion cancelled")
+            if progress:
+                progress(index / max(1, len(scene.parts)) * 0.75)
+        corners = np.array(list(product(*[(0, n) for n in part.size])))
+        world = (corners @ part.transform[:3, :3].T + part.transform[:3, 3]) * scale
+        pmin, pmax = np.floor(world.min(0) + 1e-7).astype(int), np.ceil(world.max(0) - 1e-7).astype(int)
+        candidates = np.array(list(product(*[range(a, b) for a, b in zip(pmin, pmax)])))
+        if len(candidates) == 0:
+            continue
+        # Aligned full boxes need no occupancy samples, including thin structural plates.
+        aligned = np.allclose(part.transform[:3, :3], np.round(part.transform[:3, :3]))
+        if part.shape == "box" and aligned:
+            masks = np.ones((len(candidates), 8), dtype=bool)
+        else:
+            inv = np.linalg.inv(part.transform)
+            points = (candidates[:, None, :] + SAMPLES).reshape(-1, 3) / scale
+            local = (points @ inv[:3, :3].T + inv[:3, 3]) / part.size
+            masks = contains(part.shape, local).reshape(-1, 8)
+        for position, mask in zip(candidates, masks):
+            if mask.any():
+                shape = cell_shape(mask) if aligned else "box"
+                cells.setdefault(
+                    tuple(position - origin), replace(part, shape=shape) if shape != part.shape else part
+                )
+        # Forward sampling protects small features that fall between target sample centers.
+        if not aligned or min(part.size) < 0.5:
+            axes = [
+                (np.arange(max(1, int(np.ceil(n * scale * 2)))) + 0.5) / max(1, int(np.ceil(n * scale * 2)))
+                for n in part.size
+            ]
+            seeds = np.array(list(product(*axes)))
+            seeds = seeds[contains(part.shape, seeds)] * part.size
+            positions = np.floor(
+                (seeds @ part.transform[:3, :3].T + part.transform[:3, 3]) * scale + 1e-7
+            ).astype(int)
+            for position in positions:
+                cells.setdefault(tuple(position - origin), replace(part, shape="box"))
+        if len(cells) > MAX_PARTS:
+            raise ValueError(f"Output exceeds {MAX_PARTS:,} occupied cells; choose 1× or a smaller structure")
+    if cancelled and cancelled():
+        raise Cancelled("Conversion cancelled")
     return cells, tuple(float(n) for n in origin)

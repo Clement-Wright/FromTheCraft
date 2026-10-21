@@ -21,9 +21,9 @@ def nbt_bytes(root):
 @pytest.fixture
 def mc_scene():
     region = Region(0, 0, 0, 3, 2, 2)
-    region[0,0,0] = BlockState("minecraft:oak_planks")
-    region[2,0,1] = BlockState("minecraft:red_stained_glass")
-    region[1,1,0] = BlockState("minecraft:stone")
+    region[0, 0, 0] = BlockState("minecraft:oak_planks")
+    region[2, 0, 1] = BlockState("minecraft:red_stained_glass")
+    region[1, 1, 0] = BlockState("minecraft:stone")
     return read_structure(nbt_bytes(region.to_structure_nbt(mc_version=3955)))
 
 
@@ -44,13 +44,13 @@ def test_litematic_signed_regions_offsets_and_air_do_not_erase():
     from fromthecraft.minecraft import read_litematic
 
     left = Region(-3, 1, -2, -2, 1, 1)
-    left[-1,0,0] = BlockState("minecraft:oak_planks")
-    left[0,0,0] = BlockState("minecraft:glass")
+    left[-1, 0, 0] = BlockState("minecraft:oak_planks")
+    left[0, 0, 0] = BlockState("minecraft:glass")
     right = Region(-3, 1, -2, 2, 1, 1)
-    right[1,0,0] = BlockState("minecraft:stone")
-    schematic = Schematic(regions={"left":left, "right":right}, mc_version=3955)
+    right[1, 0, 0] = BlockState("minecraft:stone")
+    schematic = Schematic(regions={"left": left, "right": right}, mc_version=3955)
     scene = read_litematic(nbt_bytes(schematic.to_nbt()))
-    assert {tuple(p.transform[:3,3]) for p in scene.parts} == {(-4,1,-2),(-3,1,-2),(-2,1,-2)}
+    assert {tuple(p.transform[:3, 3]) for p in scene.parts} == {(-4, 1, -2), (-3, 1, -2), (-2, 1, -2)}
     result = convert(scene, "blueprint")
     assert len(result.scene.parts) == 3
 
@@ -66,17 +66,17 @@ def test_litematic_export_uses_3955_and_library_can_read():
 
 
 def test_non_1211_input_is_not_silently_upgraded():
-    region = Region(0,0,0,1,1,1)
-    region[0,0,0] = BlockState("minecraft:stone")
+    region = Region(0, 0, 0, 1, 1, 1)
+    region[0, 0, 0] = BlockState("minecraft:stone")
     with pytest.raises(ValueError, match="1.21.1"):
         read_structure(nbt_bytes(region.to_structure_nbt(mc_version=2975)))
 
 
 def test_unknown_modded_and_fluids_are_reported():
-    region = Region(0,0,0,3,1,1)
-    region[0,0,0] = BlockState("some_mod:machine")
-    region[1,0,0] = BlockState("minecraft:water", level="0")
-    region[2,0,0] = BlockState("minecraft:tnt")
+    region = Region(0, 0, 0, 3, 1, 1)
+    region[0, 0, 0] = BlockState("some_mod:machine")
+    region[1, 0, 0] = BlockState("minecraft:water", level="0")
+    region[2, 0, 0] = BlockState("minecraft:tnt")
     scene = read_structure(nbt_bytes(region.to_structure_nbt(mc_version=3955)))
     assert len(scene.parts) == 2
     assert any("Unrecognized" in k for k in scene.notices)
