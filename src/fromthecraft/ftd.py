@@ -83,3 +83,42 @@ def read_blueprint(content: bytes) -> Scene:
     except (KeyError, TypeError, IndexError, OverflowError) as exc:
         raise ValueError(f"Malformed blueprint block data: {exc}") from exc
     return Scene(parts, "blueprint", notices, str(root.get("GameVersion", "unknown")))
+
+
+def write_blueprint(cells, name="FromTheCraft"):
+    paints = [(0.,0.,0.,0.)]
+    positions, rotations, paint_indices, block_ids = [], [], [], []
+    dictionary = {"499": "e63040c9-0027-4fd3-be30-67fe3e950140"}
+    ids = {}
+    for position,part in sorted(cells.items()):
+        material = part.material if part.material in {"Wood", "Stone", "Glass"} else "Metal"
+        guid = next(k for k,v in CATALOG.items() if v["Name"].lower() == material.lower()+" block")
+        if guid not in ids:
+            ids[guid] = 1000+len(ids)
+            dictionary[str(ids[guid])] = guid
+        paint = tuple(round(float(v),6) for v in part.color)+(1.,)
+        if paint not in paints and len(paints) < 32:
+            paints.append(paint)
+        index = min(range(1,len(paints)), key=lambda i: np.linalg.norm(np.array(paints[i][:3])-part.color))
+        positions.append(",".join(str(int(n)) for n in position))
+        rotations.append(0)
+        paint_indices.append(index)
+        block_ids.append(ids[guid])
+    count = len(positions)
+    coords = np.array(list(cells))
+    def coord_string(point):
+        return ",".join(str(int(n)) for n in point)
+
+    construct = {"Name": name, "blueprintName": name, "blueprintVersion": 1,
+                 "GameVersion": "3.8.5.11", "LocalPosition": "0,0,0", "LocalRotation": "0,0,0,1",
+                 "ItemNumber": 499, "SCs": [], "COL": [",".join(str(n) for n in c) for c in paints],
+                 "BLP": positions, "BLR": rotations, "BCI": paint_indices, "BlockIds": block_ids,
+                 "BP1": None, "BP2": None, "BEI": None, "BlockData": "", "VehicleData": "",
+                 "BlockState": f"=0,{count}", "BlockStringData": [], "BlockStringDataIds": [],
+                 "TotalBlockCount": count, "BlockCount": count, "AliveCount": count,
+                 "MinCords": coord_string(coords.min(0)), "MaxCords": coord_string(coords.max(0)),
+                 "ContainedMaterialCost": 0., "PersistentSubObjectIndex": 0, "PersistentBlockIndex": 0,
+                 "SerialisedInfo": {"JsonDictionary": {}, "IsEmpty": True}, "designChanged": False}
+    return json.dumps({"FileModelVersion": {"Major": 1, "Minor": 0}, "Name": name, "Version": 1,
+                       "SavedTotalBlockCount": count, "ContainedMaterialCost": 0.,
+                       "ItemDictionary": dictionary, "Blueprint": construct}, separators=(",", ":")).encode()

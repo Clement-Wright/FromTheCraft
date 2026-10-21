@@ -1,0 +1,25 @@
+{
+  "ftd": {
+    "repository": "https://github.com/FRUCHTBA3R/FtD-Blueprint-Bot",
+    "revision": "a7c162bec615f277fa1eeecdbaf9d4680d5ac2e4",
+    "files": [
+      "blocks.json",
+      "size_id_dictionary.json"
+    ],
+    "license": "MIT; see FTD-CATALOG-LICENSE.txt",
+    "scope": "1861 catalog entries, not a claim of current FtD completeness",
+    "schema_reference": "https://github.com/Will-Morr/CAD_to_FromTheDepths/blob/main/ExampleVehicles/SINGLE_BLOCK_TEST.blueprint",
+    "schema_game_version": "3.8.5.11",
+    "reference_redistribution": "Schema inspected only; fixture and author data not redistributed"
+  },
+  "minecraft": {
+    "repository": "https://github.com/PrismarineJS/minecraft-data",
+    "package": "minecraft-data@3.100.0",
+    "selector": "minecraft-data('1.21.1')",
+    "data_version": 3955,
+    "protocol_version": 767,
+    "block_count": 1060,
+    "license": "MIT",
+    "policy": "palettes.mc_policy: air/fluids/nonstructural skip; structural families approximate shape; building cubes mapped; other registry entries inert footprint approximations; unknown IDs distinct placeholders"
+  }
+}
