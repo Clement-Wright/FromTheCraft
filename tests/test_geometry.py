@@ -118,7 +118,7 @@ def test_hollow_hull_and_internal_deck_remain_empty():
 def test_wedge_exports_stairs_and_known_curve_keeps_native_preview():
     from fromthecraft.ftd import ftd_policy
 
-    assert ftd_policy({"Name": "Metal down slope (1m)", "Material": "Metal"})[1] == "wedge"
+    assert ftd_policy({"Name": "Metal down slope (1m)", "Material": "Metal"})[1] == "ftd_slope"
     assert ftd_policy({"Name": "Metal quarter circle (2m)", "Material": "Metal"})[1] == "curve"
     t = np.eye(4)
     part = Part("slope", "wedge", (1, 1, 1), t, "Stone", (0.5, 0.5, 0.5))

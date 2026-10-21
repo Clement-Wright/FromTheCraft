@@ -1,8 +1,10 @@
 from itertools import product
 from dataclasses import replace
+from collections import deque
 
 import numpy as np
 
+from .ftd_shapes import planes
 from .model import MAX_AXIS, MAX_PARTS, MAX_VOLUME, Cancelled, Scene
 
 # FtD's 24 discrete orientations, forward and up. Right = up cross forward.
@@ -77,7 +79,11 @@ def checked_size(size):
 def contains(shape, points):
     x, y, z = points.T
     inside = np.all((points >= -1e-8) & (points <= 1 + 1e-8), axis=1)
-    if shape == "wedge":
+    clipping = planes(shape)
+    if clipping:
+        coefficients = np.asarray(clipping)
+        inside &= np.all(points @ coefficients[:, :3].T <= coefficients[:, 3] + 1e-8, axis=1)
+    elif shape == "wedge":
         inside &= y <= z + 1e-8
     elif shape == "curve":
         inside &= y * y + (1 - z) ** 2 <= 1 + 1e-8
@@ -181,3 +187,61 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None):
     if cancelled and cancelled():
         raise Cancelled("Conversion cancelled")
     return cells, tuple(float(n) for n in origin)
+
+
+def hollow_cells(cells, thickness=1, cancelled=None, progress=None):
+    """Keep cells within the requested face-neighbor distance of exterior air."""
+    if thickness not in (1, 2, 3, 4):
+        raise ValueError("Shell thickness must be 1, 2, 3, or 4 cells")
+    if cancelled and cancelled():
+        raise Cancelled("Conversion cancelled")
+    if not cells:
+        return {}
+    positions = np.asarray(list(cells), dtype=np.intp)
+    size = positions.max(0) + 1
+    checked_size(size)
+    # Scan air along the longest axis, so long narrow structures need fewer spans.
+    order = np.argsort(-size)
+    points = positions[:, order] + 1
+    solid = np.zeros(tuple(size[order] + 2), dtype=bool, order="F")
+    solid[tuple(points.T)] = True
+    outside = np.zeros_like(solid)
+    pending = deque([(0, 0, 0)])
+    spans = 0
+    while pending:
+        x, y, z = pending.popleft()
+        if outside[x, y, z] or solid[x, y, z]:
+            continue
+        if spans % 128 == 0:
+            if cancelled and cancelled():
+                raise Cancelled("Conversion cancelled")
+            if progress:
+                progress(0.78)
+        clear = ~(solid[:, y, z] | outside[:, y, z])
+        before = np.flatnonzero(~clear[:x])
+        after = np.flatnonzero(~clear[x + 1 :])
+        left = int(before[-1] + 1) if len(before) else 0
+        right = int(x + 1 + after[0]) if len(after) else len(clear)
+        outside[left:right, y, z] = True
+        for ny, nz in ((y - 1, z), (y + 1, z), (y, z - 1), (y, z + 1)):
+            if not (0 <= ny < solid.shape[1] and 0 <= nz < solid.shape[2]):
+                continue
+            free = ~(solid[left:right, ny, nz] | outside[left:right, ny, nz])
+            starts = np.flatnonzero(free & ~np.r_[False, free[:-1]])
+            pending.extend((left + int(start), ny, nz) for start in starts)
+        spans += 1
+    # Expand through grid cells after finding exterior air; sealed cavities stay sealed.
+    for _ in range(thickness):
+        if cancelled and cancelled():
+            raise Cancelled("Conversion cancelled")
+        grown = outside.copy()
+        for axis in range(3):
+            lower, upper = [slice(None)] * 3, [slice(None)] * 3
+            lower[axis], upper[axis] = slice(None, -1), slice(1, None)
+            grown[tuple(lower)] |= outside[tuple(upper)]
+            grown[tuple(upper)] |= outside[tuple(lower)]
+        outside = grown
+    keep = outside[tuple(points.T)]
+    if progress:
+        progress(0.88)
+    return {position: part for (position, part), retained in zip(cells.items(), keep) if retained}

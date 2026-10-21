@@ -2,24 +2,41 @@ from collections import Counter
 
 import numpy as np
 
-from .geometry import voxelize
+from .geometry import hollow_cells, voxelize
 from .ftd import read_blueprint, write_blueprint
 from .minecraft import read_litematic, read_structure, write_litematic, write_structure
 from .model import Result
 from .palettes import mc_target
 
 
-def convert(scene, output, scale=1, preference="balanced", progress=None, cancelled=None):
+def convert(
+    scene,
+    output,
+    scale=1,
+    preference="balanced",
+    progress=None,
+    cancelled=None,
+    hollow=False,
+    shell_thickness=1,
+):
     if scale not in (0.25, 0.5, 1, 2, 4):
         raise ValueError("Scale must be 0.25, 0.5, 1, 2, or 4")
     if preference not in {"balanced", "material", "color"}:
         raise ValueError("Unknown material preference")
+    if shell_thickness not in (1, 2, 3, 4):
+        raise ValueError("Shell thickness must be 1, 2, 3, or 4 cells")
     if output not in ({"nbt", "litematic"} if scene.format == "blueprint" else {"blueprint"}):
         raise ValueError("Choose a format in the other game")
     cells, offset = voxelize(scene, scale, progress, cancelled)
     if not cells:
         raise ValueError("No structural blocks remain after skipped blocks")
     notices = Counter(scene.notices)
+    if hollow:
+        before = len(cells)
+        cells = hollow_cells(cells, shell_thickness, cancelled, progress)
+        notices[
+            f"Hollow interior removed {before - len(cells):,} cells; kept a {shell_thickness}-cell exterior shell"
+        ] += 1
     if scale < 1:
         notices["Reduced scale merges occupied cells; small openings and thin details may be lost"] += 1
     if output == "blueprint":

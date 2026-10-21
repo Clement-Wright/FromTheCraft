@@ -106,3 +106,42 @@ def test_unicode_source_filename_can_be_exported(client):
     response = client.get("/api/export", params={"result_id": status["result_id"]})
     assert response.status_code == 200
     assert "filename*=UTF-8''" in response.headers["content-disposition"]
+
+
+def test_hollow_option_reloads_the_exact_download_and_inventory(client):
+    import json
+    from fromthecraft.convert import read_file
+    from fromthecraft.preview import preview
+
+    document = json.loads(Path("tests/fixtures/asymmetric.blueprint").read_bytes())
+    document["Blueprint"].update(BLP=["0,0,0"], BLR=[0], BCI=[0], BlockIds=[0], SCs=[])
+    response = client.post("/api/source", files={"file": ("cube.blueprint", json.dumps(document).encode())})
+    assert response.status_code == 200
+    assert client.post("/api/convert", json={"format": "nbt", "scale": 4, "hollow": True}).status_code == 200
+    status = finished(client)
+    assert status["state"] == "ready", status
+    response = client.get("/api/export", params={"result_id": status["result_id"]})
+    assert status["converted"]["count"] == 56
+    assert sum(item["count"] for item in status["converted"]["materials"]) == 56
+    assert preview(read_file(response.content, "nbt"), status["offset"]) == status["converted"]
+    assert client.post("/api/convert", json={"format": "nbt", "shell_thickness": 9}).status_code == 422
+
+
+def test_reverse_slope_preview_matches_serialized_blueprint_with_native_vertices(client):
+    from fromthecraft.convert import read_file
+    from fromthecraft.minecraft import write_structure
+    from fromthecraft.model import State
+    from fromthecraft.preview import preview
+
+    state = State(
+        "minecraft:oak_stairs",
+        (("facing", "east"), ("half", "bottom"), ("shape", "straight"), ("waterlogged", "false")),
+    )
+    source = write_structure({(0, 0, 0): state}, (1, 1, 1))
+    client.post("/api/source", files={"file": ("stairs.nbt", source)})
+    client.post("/api/convert", json={"format": "blueprint"})
+    status = finished(client)
+    assert status["state"] == "ready", status
+    assert status["converted"]["groups"][0]["vertices"]
+    exported = client.get("/api/export", params={"result_id": status["result_id"]})
+    assert preview(read_file(exported.content, "blueprint"), status["offset"]) == status["converted"]

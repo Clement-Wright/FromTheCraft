@@ -7,10 +7,15 @@ import numpy as np
 
 from .catalog import game_assets, installed_catalog
 from .geometry import quaternion, rotation
+from .ftd_shapes import native_shape
 from .model import MAX_PARTS, Part, Scene
 
 DATA = Path(__file__).with_name("data")
 CATALOG = json.loads((DATA / "ftd_blocks.json").read_text())
+NATIVE_SHAPE_CORRECTIONS = json.loads((DATA / "ftd_native_shape_corrections.json").read_text())["corrections"]
+for guid, shape in NATIVE_SHAPE_CORRECTIONS.items():
+    if guid in CATALOG:
+        CATALOG[guid]["NativeShape"] = shape
 FOOTPRINTS = json.loads((DATA / "ftd_size_id_dictionary.json").read_text())
 CUBE_IDS = {
     v["Material"]: k for k, v in CATALOG.items() if v["Name"].lower() == v["Material"].lower() + " block"
@@ -40,10 +45,9 @@ def ftd_policy(entry):
         return "skipped", "none"
     if any(word in name for word in ("curve", "quarter circle", "rounded hull")):
         return "approximated", "curve"
-    if "triangle corner" in name:
-        return "approximated", "corner"
-    if "slope" in name or "wedge" in name:
-        return "approximated", "wedge"
+    shape = native_shape(entry)
+    if shape:
+        return "approximated", shape
     if re.fullmatch(
         r"(wood|metal|alloy|stone|glass|rubber|lead|heavy armour|reinforced wood|light-weight alloy) (block|beam \([1-4]m\))",
         name,
@@ -156,7 +160,7 @@ def write_blueprint(cells, name="FromTheCraft"):
         if part.shape.startswith("step_") and material in SLOPE_IDS:
             _, facing, half = part.shape.split("_")
             guid = SLOPE_IDS[material]
-            rot = {"south": 0, "east": 1, "north": 2, "west": 3}[facing] + (12 if half == "top" else 0)
+            rot = {"north": 0, "west": 1, "south": 2, "east": 3}[facing] + (12 if half == "top" else 0)
         if guid not in ids:
             ids[guid] = 1000 + len(ids)
             dictionary[str(ids[guid])] = guid

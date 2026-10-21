@@ -160,6 +160,8 @@ class Options(BaseModel):
     format: Literal["nbt", "litematic", "blueprint"]
     scale: Literal[0.25, 0.5, 1, 2, 4] = 1
     preference: Literal["balanced", "material", "color"] = "balanced"
+    hollow: bool = False
+    shell_thickness: Literal[1, 2, 3, 4] = 1
 
 
 @app.post("/api/convert")
@@ -179,7 +181,8 @@ def start_conversion(request: Request, options: Options):
     def work():
         try:
             result = convert(
-                scene, options.format, options.scale, options.preference, progress, cancelled.is_set
+                scene, options.format, options.scale, options.preference, progress, cancelled.is_set,
+                options.hollow, options.shell_thickness
             )
             display = preview(result.scene, result.offset)
             with session.lock:

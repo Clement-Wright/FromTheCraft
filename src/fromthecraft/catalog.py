@@ -47,6 +47,11 @@ def installed_catalog(root, baseline):
         name = item["ComponentId"]["Name"]
         entry.update(baseline.get(guid, {}))
         entry["Name"] = name
+        mesh = item.get("MeshReference", {})
+        if mesh.get("IsValidReference"):
+            mesh_name = mesh.get("Reference", {}).get("Name")
+            if isinstance(mesh_name, str) and mesh_name:
+                entry["MeshName"] = mesh_name
         if "Material" not in entry:
             lower = name.lower()
             entry["Material"] = next(

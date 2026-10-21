@@ -23,6 +23,10 @@ def main():
     conversion.add_argument("destination", type=Path)
     conversion.add_argument("--scale", type=float, choices=[4, 2, 1, 0.5, 0.25], default=1)
     conversion.add_argument("--palette", choices=["balanced", "material", "color"], default="balanced")
+    conversion.add_argument(
+        "--hollow", action="store_true", help="Keep an exterior shell and remove enclosed parts"
+    )
+    conversion.add_argument("--shell-thickness", type=int, choices=[1, 2, 3, 4], default=1)
     args = parser.parse_args()
     if args.command is None:
         from .launch import launch
@@ -33,7 +37,14 @@ def main():
         parser.error("Source and destination must differ")
     try:
         scene = read_file(args.source.read_bytes(), args.source.suffix)
-        result = convert(scene, args.destination.suffix.lstrip("."), args.scale, args.palette)
+        result = convert(
+            scene,
+            args.destination.suffix.lstrip("."),
+            args.scale,
+            args.palette,
+            hollow=args.hollow,
+            shell_thickness=args.shell_thickness,
+        )
         with args.destination.open("xb") as target:
             target.write(result.content)
     except (OSError, ValueError) as exc:
