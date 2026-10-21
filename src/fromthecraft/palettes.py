@@ -119,14 +119,17 @@ def mc_target(part, preference):
     if part.transparent:
         return base
     if part.shape.startswith("slab_") or part.shape.startswith("step_"):
-        stem = nearest_color("wood", part.color) if part.material in {"Wood", "Reinforced Wood"} else "stone"
+        stem = base.name.removesuffix("_planks")
+        suffix = "_slab" if part.shape.startswith("slab_") else "_stairs"
+        if stem + suffix not in BLOCKS:
+            return base
         if part.shape.startswith("slab_"):
             return State(
-                f"minecraft:{stem}_slab", (("type", part.shape.split("_")[1]), ("waterlogged", "false"))
+                stem + suffix, (("type", part.shape.split("_")[1]), ("waterlogged", "false"))
             )
         _, facing, half = part.shape.split("_")
         return State(
-            f"minecraft:{stem}_stairs",
+            stem + suffix,
             tuple(
                 sorted({"facing": facing, "half": half, "shape": "straight", "waterlogged": "false"}.items())
             ),
