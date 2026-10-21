@@ -88,7 +88,8 @@ h2 {
   font-weight: 600;
 }
 .app {
-  min-height: 100vh;
+  height: 100dvh;
+  min-height: 650px;
   display: flex;
   flex-direction: column;
 }
@@ -124,7 +125,7 @@ h2 {
 .workbench {
   display: flex;
   flex: 1;
-  min-height: 540px;
+  min-height: 0;
 }
 .settings {
   width: 230px;
@@ -135,6 +136,10 @@ h2 {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  overflow-y: auto;
+}
+.settings > * {
+  flex-shrink: 0;
 }
 .settings h2 {
   margin-bottom: 10px;
@@ -191,6 +196,7 @@ h2 {
 }
 .comparison {
   min-width: 0;
+  min-height: 0;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -234,7 +240,7 @@ h2 {
   flex: 1;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  min-height: 410px;
+  min-height: 0;
   position: relative;
 }
 .viewport {
@@ -413,11 +419,6 @@ h2 {
   padding: 10px;
   font-size: 12px;
 }
-@media (min-height: 780px) {
-  .workbench {
-    min-height: calc(100vh - 150px);
-  }
-}
 @media (max-width: 1000px) {
   .app-header {
     gap: 16px;
@@ -449,6 +450,10 @@ h2 {
   }
 }
 @media (max-width: 700px) {
+  .app {
+    height: auto;
+    min-height: 100vh;
+  }
   .app-header {
     height: auto;
     flex-wrap: wrap;
@@ -469,6 +474,7 @@ h2 {
     display: block;
   }
   .settings {
+    overflow: visible;
     width: auto;
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -533,41 +539,5 @@ h2 {
   }
   button:active:not(:disabled) {
     transform: none;
-  }
-}
-:root .app {
-  height: 100dvh;
-  min-height: 650px;
-}
-.workbench {
-  min-height: 0;
-}
-.comparison {
-  min-height: 0;
-}
-.paired-views {
-  min-height: 0;
-}
-.settings {
-  overflow-y: auto;
-}
-.settings > * {
-  flex-shrink: 0;
-}
-@media (min-height: 780px) {
-  .workbench {
-    min-height: 0;
-  }
-}
-@media (max-width: 700px) {
-  :root .app {
-    height: auto;
-    min-height: 100vh;
-  }
-  .settings {
-    overflow: visible;
-  }
-  .paired-views {
-    min-height: 410px;
   }
 }

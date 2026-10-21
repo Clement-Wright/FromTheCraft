@@ -32,6 +32,8 @@ export default function App() {
   const [view, setView] = useState("orbit");
   const [reset, setReset] = useState(0);
   const [initialized, setInitialized] = useState(false);
+  const [canClose, setCanClose] = useState(false);
+  const [catalog, setCatalog] = useState("Bundled FtD catalog");
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const token = useRef("");
@@ -43,7 +45,12 @@ export default function App() {
     fetch("/api/session")
       .then(async (response) => {
         if (!response.ok) throw new Error("Could not start the local session.");
-        token.current = (await response.json()).token;
+        const session = await response.json();
+        token.current = session.token;
+        setCanClose(session.can_close);
+        setCatalog(
+          `FtD catalog: ${session.ftd_catalog ?? "bundled reference"}`,
+        );
         setInitialized(true);
       })
       .catch((error) =>
@@ -54,6 +61,14 @@ export default function App() {
         }),
       );
   }, []);
+
+  useEffect(() => {
+    if (!initialized) return;
+    const timer = window.setInterval(() => {
+      void fetch("/api/heartbeat");
+    }, 20000);
+    return () => window.clearInterval(timer);
+  }, [initialized]);
 
   async function request(path: string, body?: BodyInit, json = false) {
     const response = await fetch(path, {
@@ -114,8 +129,8 @@ export default function App() {
   }
 
   function invalidate() {
-    ++generation.current;
     if (!sourceRef.current) return;
+    ++generation.current;
     setStatus({ state: "stale", progress: 0, error: "" });
     mutate(() => request("/api/invalidate")).catch((error) =>
       setStatus({ state: "failed", progress: 0, error: error.message }),
@@ -188,6 +203,25 @@ export default function App() {
       setStatus((previous) => ({
         ...previous,
         state: "failed",
+        error: (error as Error).message,
+      }));
+    }
+  }
+
+  async function close() {
+    try {
+      await mutate(() => request("/api/close"));
+      ++generation.current;
+      setInitialized(false);
+      setCanClose(false);
+      setStatus({
+        state: "closed",
+        progress: 0,
+        error: "Application stopped. You can close this tab.",
+      });
+    } catch (error) {
+      setStatus((previous) => ({
+        ...previous,
         error: (error as Error).message,
       }));
     }
@@ -346,7 +380,13 @@ export default function App() {
             <button onClick={() => void cancel()}>Cancel conversion</button>
           )}
           <div className="scope-note">
+            {canClose && (
+              <button className="close-app" onClick={() => void close()}>
+                Close app
+              </button>
+            )}
             <strong>Structure only</strong>
+            <p>{catalog}</p>
             <p>
               Hulls, decks and building materials. Rotated constructs become
               static geometry.

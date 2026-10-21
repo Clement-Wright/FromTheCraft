@@ -96,3 +96,13 @@ def test_bad_output_option_and_oversized_dimensions(client):
     upload(client)
     assert client.post("/api/convert", json={"format": "exe"}).status_code == 422
     assert client.post("/api/convert", json={"format": "nbt", "scale": 50}).status_code == 422
+
+
+def test_unicode_source_filename_can_be_exported(client):
+    content = Path("tests/fixtures/asymmetric.blueprint").read_bytes()
+    assert client.post("/api/source", files={"file": ("船.blueprint", content)}).status_code == 200
+    client.post("/api/convert", json={"format": "nbt"})
+    status = finished(client)
+    response = client.get("/api/export", params={"result_id": status["result_id"]})
+    assert response.status_code == 200
+    assert "filename*=UTF-8''" in response.headers["content-disposition"]

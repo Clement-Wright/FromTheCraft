@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
+from urllib.parse import quote
 
 from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse
@@ -16,6 +17,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .convert import convert, read_file
+from .ftd import CATALOG_INFO
 from .model import Cancelled, Result, Scene
 from .preview import preview
 
@@ -25,6 +27,7 @@ executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="conversion")
 sessions = OrderedDict()
 sessions_lock = threading.Lock()
 STATIC = Path(__file__).with_name("static")
+shutdown_callback = None
 
 
 @dataclass
@@ -67,6 +70,8 @@ def session_for(request):
 @app.middleware("http")
 async def local_service(request, call_next):
     if request.method not in {"GET", "HEAD"}:
+        if int(request.headers.get("content-length", "0")) > 33 * 1024**2:
+            return Response("Upload exceeds 32 MiB", status_code=413)
         origin = request.headers.get("origin")
         if origin and origin != str(request.base_url).rstrip("/"):
             return Response("Only this local application may submit files", status_code=403)
@@ -98,7 +103,26 @@ def open_session(request: Request, response: Response):
             sid = secrets.token_urlsafe(24)
             session = sessions[sid] = Session()
         response.set_cookie("fromthecraft", sid, httponly=True, samesite="strict")
-    return {"token": session.token}
+    return {
+        "token": session.token,
+        "can_close": shutdown_callback is not None,
+        "ftd_catalog": CATALOG_INFO["version"],
+        "ftd_catalog_entries": CATALOG_INFO["entries"],
+    }
+
+
+@app.get("/api/heartbeat")
+def heartbeat(request: Request):
+    session_for(request)
+    return {"running": True}
+
+
+@app.post("/api/close")
+def close_app():
+    if shutdown_callback is None:
+        raise HTTPException(409, "Stop this development service in its terminal")
+    shutdown_callback()
+    return {"state": "closed"}
 
 
 @app.post("/api/source")
@@ -111,6 +135,9 @@ async def open_source(request: Request, file: UploadFile = File(...)):
     content = await file.read(32 * 1024**2 + 1)
     await file.close()
     if len(content) > 32 * 1024**2:
+        with session.lock:
+            if generation == session.generation:
+                session.state, session.error = "failed", "File exceeds 32 MiB"
         raise HTTPException(413, "File exceeds 32 MiB")
     try:
         scene = await run_in_threadpool(read_file, content, Path(file.filename or "").suffix)
@@ -220,11 +247,13 @@ def export(request: Request, result_id: str = ""):
         if session.result is None or result_id != session.result_id:
             raise HTTPException(409, "Convert again before exporting")
         filename = "".join(c for c in session.filename if c.isalnum() or c in "-_ ")[:80] or "structure"
+        filename += f"_converted.{session.result.format}"
+        fallback = "".join(c for c in filename if c.isascii()) or "structure"
         return Response(
             session.result.content,
             media_type="application/octet-stream",
             headers={
-                "Content-Disposition": f'attachment; filename="{filename}_converted.{session.result.format}"'
+                "Content-Disposition": f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(filename)}"
             },
         )
 

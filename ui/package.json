@@ -20,6 +20,7 @@
     "@types/three": "0.180.0",
     "@vitejs/plugin-react": "4.4.1",
     "minecraft-data": "3.100.0",
+    "prettier": "3.5.3",
     "prismarine-nbt": "2.7.0",
     "typescript": "5.8.3",
     "vite": "6.4.4"
