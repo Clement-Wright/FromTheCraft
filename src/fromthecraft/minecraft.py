@@ -7,6 +7,7 @@ import nbtlib as nbt
 import numpy as np
 from litemapy import BlockState, Region, Schematic, TileEntity
 
+from .compatibility import MOD_STATES
 from .geometry import checked_size
 from .model import DATA_VERSION, MAX_PARTS, MAX_VOLUME, Part, Scene, State
 from .palettes import mc_material, mc_policy, validate_state
@@ -135,6 +136,18 @@ def check_version(version):
 
 def accept(cells, position, block, notices, entity=None):
     state = State(block.id, tuple(sorted((str(k), str(v)) for k, v in block.properties())))
+    if state.name in MOD_STATES:
+        rules = MOD_STATES[state.name]
+        supported = tuple((key, value) for key, value in state.properties if value in rules.get(key, ()))
+        if supported != state.properties:
+            omitted = ", ".join(
+                f"{key}={value}" for key, value in state.properties if (key, value) not in supported
+            )
+            notices[
+                f"Approximated mod state {state.name}: unsupported source properties {omitted}; "
+                "using verified inert shape"
+            ] += 1
+            state = State(state.name, supported)
     validate_state(state)
     policy, family = mc_policy(state.name)
     if policy == "skipped":

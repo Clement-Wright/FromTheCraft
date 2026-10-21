@@ -1075,6 +1075,22 @@
             "x",
             "y",
             "z"
+          ],
+          "east": [
+            "false",
+            "true"
+          ],
+          "north": [
+            "false",
+            "true"
+          ],
+          "south": [
+            "false",
+            "true"
+          ],
+          "west": [
+            "false",
+            "true"
           ]
         },
         "dndecor:red_sheet_metal": {
@@ -1082,6 +1098,22 @@
             "x",
             "y",
             "z"
+          ],
+          "east": [
+            "false",
+            "true"
+          ],
+          "north": [
+            "false",
+            "true"
+          ],
+          "south": [
+            "false",
+            "true"
+          ],
+          "west": [
+            "false",
+            "true"
           ]
         },
         "dndecor:blue_sheet_metal": {
@@ -1089,6 +1121,22 @@
             "x",
             "y",
             "z"
+          ],
+          "east": [
+            "false",
+            "true"
+          ],
+          "north": [
+            "false",
+            "true"
+          ],
+          "south": [
+            "false",
+            "true"
+          ],
+          "west": [
+            "false",
+            "true"
           ]
         },
         "dndecor:yellow_sheet_metal": {
@@ -1096,6 +1144,22 @@
             "x",
             "y",
             "z"
+          ],
+          "east": [
+            "false",
+            "true"
+          ],
+          "north": [
+            "false",
+            "true"
+          ],
+          "south": [
+            "false",
+            "true"
+          ],
+          "west": [
+            "false",
+            "true"
           ]
         },
         "dndecor:brass_sheet_metal": {
@@ -1103,6 +1167,22 @@
             "x",
             "y",
             "z"
+          ],
+          "east": [
+            "false",
+            "true"
+          ],
+          "north": [
+            "false",
+            "true"
+          ],
+          "south": [
+            "false",
+            "true"
+          ],
+          "west": [
+            "false",
+            "true"
           ]
         },
         "dndecor:copper_sheet_metal": {
@@ -1110,6 +1190,22 @@
             "x",
             "y",
             "z"
+          ],
+          "east": [
+            "false",
+            "true"
+          ],
+          "north": [
+            "false",
+            "true"
+          ],
+          "south": [
+            "false",
+            "true"
+          ],
+          "west": [
+            "false",
+            "true"
           ]
         },
         "dndecor:cut_amethyst": {},
@@ -1288,7 +1384,7 @@
           ]
         }
       },
-      "state_evidence_note": "Variant properties from exact jar blockstates. Stair/slab waterlogged Boolean inherited from standard Minecraft StairBlock/SlabBlock, independent of visual variants."
+      "state_evidence_note": "Variant properties from exact jar blockstates. Stair/slab waterlogged Boolean inherited from standard Minecraft StairBlock/SlabBlock, independent of visual variants. Sheet-metal connection booleans verified independently from Create ConnectedPillarBlock.createBlockStateDefinition and the pinned Deco/DnD block classes; these properties are not present in visual blockstate variants."
     },
     {
       "slug": "create-deco",
@@ -1877,6 +1973,22 @@
             "x",
             "y",
             "z"
+          ],
+          "east": [
+            "false",
+            "true"
+          ],
+          "north": [
+            "false",
+            "true"
+          ],
+          "south": [
+            "false",
+            "true"
+          ],
+          "west": [
+            "false",
+            "true"
           ]
         },
         "createdeco:brass_sheet_metal": {
@@ -1884,6 +1996,22 @@
             "x",
             "y",
             "z"
+          ],
+          "east": [
+            "false",
+            "true"
+          ],
+          "north": [
+            "false",
+            "true"
+          ],
+          "south": [
+            "false",
+            "true"
+          ],
+          "west": [
+            "false",
+            "true"
           ]
         },
         "createdeco:zinc_sheet_metal": {
@@ -1891,6 +2019,22 @@
             "x",
             "y",
             "z"
+          ],
+          "east": [
+            "false",
+            "true"
+          ],
+          "north": [
+            "false",
+            "true"
+          ],
+          "south": [
+            "false",
+            "true"
+          ],
+          "west": [
+            "false",
+            "true"
           ]
         },
         "createdeco:industrial_iron_sheet_metal": {
@@ -1898,6 +2042,22 @@
             "x",
             "y",
             "z"
+          ],
+          "east": [
+            "false",
+            "true"
+          ],
+          "north": [
+            "false",
+            "true"
+          ],
+          "south": [
+            "false",
+            "true"
+          ],
+          "west": [
+            "false",
+            "true"
           ]
         },
         "createdeco:andesite_sheet_metal": {
@@ -1905,10 +2065,26 @@
             "x",
             "y",
             "z"
+          ],
+          "east": [
+            "false",
+            "true"
+          ],
+          "north": [
+            "false",
+            "true"
+          ],
+          "south": [
+            "false",
+            "true"
+          ],
+          "west": [
+            "false",
+            "true"
           ]
         }
       },
-      "state_evidence_note": "Variant properties from exact jar blockstates. Stair/slab waterlogged Boolean inherited from standard Minecraft StairBlock/SlabBlock, independent of visual variants."
+      "state_evidence_note": "Variant properties from exact jar blockstates. Stair/slab waterlogged Boolean inherited from standard Minecraft StairBlock/SlabBlock, independent of visual variants. Sheet-metal connection booleans verified independently from Create ConnectedPillarBlock.createBlockStateDefinition and the pinned Deco/DnD block classes; these properties are not present in visual blockstate variants."
     },
     {
       "slug": "create-chipped",

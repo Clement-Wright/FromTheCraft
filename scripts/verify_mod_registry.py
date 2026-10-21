@@ -32,6 +32,12 @@ def main():
                 # Standard slabs/stairs inherit a nonvisual waterlogged property.
                 if name.endswith(("_stairs", "_slab")):
                     actual["waterlogged"] = {"false", "true"}
+                if mod["slug"] in {"create-deco", "create-design-n-decor"} and name.endswith("_sheet_metal"):
+                    # These pinned classes inherit Create's ConnectedPillarBlock;
+                    # connection flags are registered in code, independent of models.
+                    actual.update(
+                        {direction: {"false", "true"} for direction in ("east", "north", "south", "west")}
+                    )
                 assert {key: sorted(values) for key, values in actual.items()} == expected, name
             for block in mod["blocks"]:
                 evidence = block["evidence"]
