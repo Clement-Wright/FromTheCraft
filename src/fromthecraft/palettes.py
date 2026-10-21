@@ -59,7 +59,7 @@ def validate_state(state: State):
         allowed = rule.get("values")
         if rule["type"] == "bool":
             allowed = ["true", "false"]
-        elif rule["type"] == "int":
+        elif rule["type"] == "int" and allowed is None:
             allowed = [str(i) for i in range(rule["num_values"])]
         if value not in allowed:
             raise ValueError(f"Invalid 1.21.1 state {state.name}[{key}={value}]")
