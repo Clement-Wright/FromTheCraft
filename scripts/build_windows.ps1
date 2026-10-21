@@ -18,5 +18,8 @@ Copy-Item -LiteralPath README.md -Destination 'dist/FromTheCraft/README.md'
 Copy-Item -LiteralPath COPYING -Destination 'dist/FromTheCraft/COPYING'
 New-Item -ItemType Directory -Path 'dist/FromTheCraft/docs' -Force | Out-Null
 Copy-Item -LiteralPath docs/implementation.md -Destination 'dist/FromTheCraft/docs/implementation.md'
+New-Item -ItemType Directory -Path 'dist/FromTheCraft/docs/images' -Force | Out-Null
+Copy-Item -LiteralPath docs/images/workbench.png -Destination 'dist/FromTheCraft/docs/images/workbench.png'
+Copy-Item -LiteralPath examples -Destination 'dist/FromTheCraft/examples' -Recurse
 Write-Host 'Portable application: dist\FromTheCraft\FromTheCraft.exe'
 Write-Host 'Keep the entire FromTheCraft folder together.'

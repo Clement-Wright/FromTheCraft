@@ -4,7 +4,7 @@ The owner's `FromTheCraft_Codex_Handoff.md` supplied the implementation scope. L
 
 ## Formats and dependencies
 
-Python 3.12.15 runs the shared converter and local service. Tested dependencies are NumPy 2.2.6, nbtlib 2.0.4, Litemapy 0.11.0b0, FastAPI 0.115.12 and Uvicorn 0.34.2. The interface uses React 19.1.0, TypeScript 5.8.3, Three.js 0.180.0 and Vite 6.4.4. The Windows build uses PyInstaller 6.13.0 and includes dependency licenses. GPL-3.0-or-later was selected to accommodate Litemapy's GPL dependency. No repository or release has been published.
+Python 3.12.15 runs the shared converter and local service. Tested dependencies are NumPy 2.2.6, nbtlib 2.0.4, Litemapy 0.11.0b0, FastAPI 0.115.12 and Uvicorn 0.34.2. The interface uses React 19.1.0, TypeScript 5.8.3, Three.js 0.180.0 and Vite 6.4.4. The Windows build uses PyInstaller 6.13.0 and includes dependency licenses. GPL-3.0-or-later was selected to accommodate Litemapy's GPL dependency.
 
 - nbtlib handles gzip binary tags; the structure adapter writes Java `StructureTemplate` fields with data version 3955. This matches the [Create mc1.21.1 loader](https://github.com/Creators-of-Create/Create/blob/mc1.21.1/dev/src/main/java/com/simibubi/create/content/schematics/SchematicItem.java). Successful independent parsing does not establish game acceptance.
 - Litemapy's installed API was exercised for region offsets, signed dimensions, palettes, states and version selection before adoption. Its default version is overridden. A direct nbtlib adapter keeps structure-NBT validation explicit; no `.schem` intermediate or MCSchematic dependency is used.
@@ -17,44 +17,42 @@ Python 3.12.15 runs the shared converter and local service. Tested dependencies 
 
 Coordinates are X right/east, Y up, Z forward/south. FtD anchors denote cell centers; Minecraft integer positions denote cell corners. One +0.5 translation bridges these conventions. Root world placement is ignored, child local transforms compose continuously, and multi-meter footprints expand before sampling. A nested 30-degree fixture checks independently calculated coordinates rather than comparing two implementations of the same formula.
 
-First occupied contribution wins overlaps; air never erases another region. Sampling keeps thin leading wedges and quarter-scale translated shapes. Interiors remain empty and internal decks remain present. Slabs, stairs, glass, paint strength and ordinary wood/metal colors have regression tests. Balanced mode preserves dark neutral paint as well as saturated colors; Material first can retain iron instead.
+First occupied contribution wins overlaps; air never erases another region. Sampling keeps thin leading wedges and quarter-scale translated shapes. With hollowing off, interiors remain empty and internal decks remain present. Slabs, stairs, glass, paint strength and ordinary wood/metal colors have regression tests. Balanced mode preserves dark neutral paint as well as saturated colors; Material first can retain iron instead.
 
 Source primitives remain independent of the target grid. Conversion serializes the target, reparses those exact bytes, and caches them for export. The common comparison frame retains serialization offsets and visible scale differences. Source or option changes invalidate export; superseded work is discarded. Browser tests check the download's SHA-256 against the cached result and exercise camera synchronization, unlinking, presets, keyboard controls, failed import, replacement and cancellation.
 
-## Real files checked locally
+## Native hull correction in 0.2.0
 
-All third-party inputs were read in place. Generated files and measurements are in ignored `artifacts/`; no ship files are committed or bundled.
+The original primitive assumed that every FtD slope rose along local +Z. The installed down-slope mesh descends along that axis. A true wedge tapers across X, while triangle corners occupy a tetrahedron or its complement. Sharing one generic wedge had reversed slopes and distorted corners in both source views and exports.
 
-Stock FtD ABlock, ShipTrainer and Marauder exercised basic parsing and newer installed IDs. A real Minecraft 1.21.1 Atlas structure exercised reverse conversion with both views open. Older Minecraft data versions are rejected explicitly.
+The correction uses explicit convex halfspaces for down-slopes, wedges, triangle and square corners, diagonal beam cuts, offsets and transition families. Preview vertices come from the same halfspaces that conversion samples. Regression tests independently compare those vertices and planes against **76 local cached meshes across 44 normalized variants**. The game importer negates the OBJ X coordinate; checks use the cached Unity coordinates. Read-only inspection of the game's quaternion initialization confirmed all 24 existing discrete rotations, so the rotation table stays unchanged. Reverse stair output now selects FtD slope rotations with the correct high face.
 
-All 13 blueprints in the supplied Constructables folder converted to both Minecraft formats at 1×. Independent prismarine-nbt 2.7.0 parsed each NBT. A separate JavaScript Litematic checker unpacked palette indices across 64-bit boundaries and compared every occupied position and state against the sibling NBT.
+Some item names are ambiguous or incorrect. Local discovery retains the actual inherited mesh reference; a small versioned table corrects 234 older bundled IDs when the game isn't installed. It contains mathematical family identifiers and provenance, with no mesh contents. Tests exercise this path in a separate process with installation discovery disabled. The older fallback still lacks some newer vanilla IDs, which remain reported omissions.
 
-| Blueprint | Occupied output cells | NBT seconds | Litematic seconds |
-| --- | ---: | ---: | ---: |
-| Aegis Bread Update | 140,774 | 16.17 | 28.50 |
-| ARD AS-05-A Cygnus | 91,323 | 10.99 | 12.81 |
-| B2A3 - Spirit of Freedom v1967 Compatible | 11,902 | 1.94 | 1.95 |
-| BC - 061A Claymore | 205,523 | 24.49 | 29.33 |
-| Constellation Class Battle-Frigate | 23,246 | 3.21 | 3.12 |
-| Constrictor | 5,786 | 0.84 | 0.86 |
-| Experimental - Horten HXVIII AmerikaBomber | 59,135 | 10.61 | 10.16 |
-| Fledgling | 3,663 | 0.59 | 0.61 |
-| MC80 Home One | 70,802 | 10.38 | 9.62 |
-| Revenant | 6,265 | 1.04 | 1.04 |
-| Stormcaller | 6,228 | 0.91 | 0.84 |
-| The Falx | 26,259 | 3.43 | 3.10 |
-| 飛空艇ラグナロク | 36,198 | 5.58 | 5.84 |
+## Hollowing and inspection
 
-Times include conversion, serialization and reparsing, excluding initial source parsing. This batch ran alongside packaging work on the development machine; these are observations rather than benchmarks. Its cumulative Python peak working set was 428.6 MiB. A separate Claymore scale run peaked at 566.2 MiB. Claymore required raising the occupied-cell limit from 200,000 to 500,000. Its 0.5× and 0.25× NBT outputs contain 31,103 and 5,176 occupied cells. The set exercises up to 147 constructs and four nesting levels, with no unknown IDs; known special parts still receive approximation or omission notices. These batch timings precede the final dark-paint palette correction, which changes material choices rather than occupancy.
+Hollowing is off by default. When enabled, a scanline flood fill marks exterior air on the bounded output grid, then face-neighbor expansion keeps a shell 1–4 cells deep. Existing empty cells remain empty. Sealed interior decks and parts can disappear; openings let exterior air reach inward. Cancellation checks run during the air scan and expansion. An independent review compared 200 randomized cases at all four thicknesses with a separate breadth-first implementation and found matching results.
 
-## Interface and Windows checks
+Hover picking uses spatial buckets before triangle tests; instanced blocks retain their identity and state through a compact palette. Keyboard I inspects the center of the focused view. Displayed coordinates are comparison-space primitive origins, not a promise of original FtD anchor coordinates. Material totals come from the parsed scenes, and the converted total therefore counts the serialized export. Placement states share a material-list row but remain visible in the hover inspector.
 
-The six requested skills were installed and read: Deslop, Make Interfaces Feel Better, no-ai-slop, Superdesign, Anti AI Slop Writing and Humanizer. The workbench uses local system fonts, restrained colors, visible focus, reduced-motion handling and compact notices. Deslop and the writing skills were applied to code comments, labels, errors and documentation. Superdesign supplied a workbench draft after the owner approved the context upload; it is not an application dependency.
+## Real-file evidence
 
-The portable folder was built on Windows and launched from a path containing spaces. Seven Chromium workflow tests passed against the final executable, including Atlas, Marauder and Claymore. At 1366×768, the paired views fit the window and the settings area scrolls. Claymore displayed 205,523 converted primitives in about 37 seconds including its serialized preview; both cameras and fixed views remained operable. Its downloaded NBT matched the cached SHA-256 and the final Litematic's independently unpacked states. Chromium used SwiftShader for these automated checks; no hardware-GPU frame rate is claimed. Close app stopped the packaged service, an idle-shutdown test exited with code 0, and normal launch served bundled assets on its selected loopback port.
+All source blueprints stayed untouched and outside Git. All **13 supplied harder FtD files** completed both Minecraft formats at 1× after the native geometry correction. Independent prismarine-nbt 2.7.0 checks parsed every structure NBT. A separate JavaScript checker unpacked Litematic palette indices across 64-bit boundaries and compared every occupied position and state against the sibling NBT.
 
-All 69 Python tests pass. They cover malformed and oversized records, both adapters and directions, all five scales, continuous transforms, native shape families, empty results, stale exports, Unicode filenames and CLI overwrite refusal. Ruff, the TypeScript/Vite build and independent format checks pass. npm audit reports no known dependency vulnerabilities at the time of verification. The Python run emits one dependency deprecation warning from Starlette's AnyIO test-client integration. A final independent code review found no new correctness defects in the launcher, packaging or installed-catalog reader.
+The set spans 3,652–204,146 occupied output cells, up to 147 constructs and four nesting levels. The largest result measured 129×85×319 cells, taking 27.59 seconds for NBT and 31.27 seconds for Litematic, including serialization and reparsing. The batch's cumulative Python peak working set was 443.4 MiB. Other checks ran concurrently; these observations are not a controlled benchmark.
+
+The reported aircraft is [Experimental - Horten H.XVIII AmerikaBomber](https://steamcommunity.com/sharedfiles/filedetails/?id=3786978690). Its local source contains 20,253 structural parts. The corrected normal export contains 58,945 blocks; a one-cell hollow shell contains 19,550. Browser checks verify native source vertices, hovered names and origins in both panes, material totals, stale-output invalidation and the exact download SHA-256. Screenshots were compared with the supplied images and the Workshop reference. The source file and screenshots are not bundled for redistribution.
+
+Stock FtD ABlock, ShipTrainer and Marauder exercised installed IDs and newer schemas. A real Java 1.21.1 Atlas structure exercised reverse conversion with both views open. Older Minecraft data versions are rejected explicitly.
+
+## UI and verification
+
+The six requested writing/design skills guided labels, README editing and workbench review. Superdesign supplied a restrained workbench reference; the application uses ordinary local CSS and system fonts. The 0.2.0 pass adds a compact header, collapsible materials, an always-visible conversion action and fit controls that frame the common source/result bounds. It adds no application accounts, cloud conversion or CDN runtime assets.
+
+The Python suite passes **107 tests** with the installed catalog; disabling installation discovery passes **103 tests**, with four local-asset checks skipped. These cover formats, all five scales, nested transforms, hollow interiors, malformed input, native shape directions, stale exports and CLI overwrite protection. Ruff and the TypeScript/Vite build pass. Starlette's test client emits one dependency deprecation warning. Chromium uses SwiftShader for browser checks; no hardware-GPU frame rate is claimed.
+
+The final Windows 0.2.0 package passes **13 browser tests** when launched from a folder with spaces. These include the real aircraft, stock FtD and large nested-ship workflows, plus independent inventory and hover-contract tests. The large nested result contains 204,146 blocks and displayed its serialized preview in 30.61 seconds. The aircraft's normal/hollow count and export hash checks also passed in the packaged build. The launcher includes its Python runtime, compiled UI, notices and original demo files; end users need no development servers. npm audit reported no known vulnerabilities in the locked dependency set during this verification.
 
 ## Unverified behavior
 
-No exported file has been loaded in Minecraft/Create, Litematica or FtD during this build. Reverse blueprint schema and IDs have structural checks, but game acceptance remains unverified. Ordinary curved-hull families lack a verified real fixture; their primitive and sampling tests are synthetic. The real nested ships contain right-angle child rotations, so non-right-angle pivot evidence comes from the asymmetric mathematical fixture. Cross-game conversion is lossy; catalog policies do not promise exact appearances.
+No exported file has been loaded in Minecraft/Create, Litematica or FtD during this build. Schema and independent-reader checks do not establish game acceptance. Ordinary curved-hull families lack a verified real fixture; thin plate slopes currently use reported footprint approximations. Real nested ships in this set use right-angle child rotations, while non-right-angle pivot evidence comes from the asymmetric mathematical fixture. Cross-game conversion is lossy; catalog policies do not promise exact appearances.
