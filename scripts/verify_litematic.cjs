@@ -18,7 +18,10 @@ async function read(file) {
     const expectedFile = path.join(path.dirname(file), path.basename(file, '.litematic') + '.nbt');
     const expected = await read(expectedFile);
     const states = new Map(expected.blocks.map(block => [block.pos.join(','), stateKey(expected.palette[block.state])]));
+    const entities = new Map(expected.blocks.filter(block => block.nbt).map(block => [block.pos.join(','), block.nbt]));
+    const appearance = entity => Object.fromEntries(Object.entries(entity).filter(([key]) => !['x','y','z'].includes(key)));
     let occupied = 0;
+    let entityCount = 0;
     for (const region of Object.values(root.Regions)) {
       const { x:w, y:h, z:l } = region.Size;
       assert(w > 0 && h > 0 && l > 0);
@@ -38,8 +41,15 @@ async function read(file) {
         assert.equal(palette[index], states.get(key), `${file}: cell ${key}`);
         occupied++;
       }
+      for (const entity of region.TileEntities) {
+        const key = [entity.x+region.Position.x,entity.y+region.Position.y,entity.z+region.Position.z].join(',');
+        assert(entities.has(key), `${file}: unexpected block entity at ${key}`);
+        assert.deepEqual(appearance(entity), appearance(entities.get(key)), `${file}: block entity ${key}`);
+        entityCount++;
+      }
     }
     assert.equal(occupied, states.size);
-    console.log(`${path.basename(file)}: ${occupied} occupied states match NBT exactly; independent bit unpack passed`);
+    assert.equal(entityCount, entities.size);
+    console.log(`${path.basename(file)}: ${occupied} occupied states and ${entityCount} block entities match NBT exactly; independent bit unpack passed`);
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });

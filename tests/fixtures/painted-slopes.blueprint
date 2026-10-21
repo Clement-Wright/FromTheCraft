@@ -1,0 +1,63 @@
+{
+  "FileModelVersion": {
+    "Major": 1,
+    "Minor": 0
+  },
+  "Name": "Painted slopes fixture",
+  "Version": 1,
+  "SavedTotalBlockCount": 6,
+  "ItemDictionary": {
+    "0": "db9ed060-d556-435b-945c-19c923e233d3",
+    "1": "c4ef6072-822a-4fa5-b618-e7fc0508c499",
+    "2": "5548037e-8428-43f8-bcb6-d730dbcd0a79"
+  },
+  "Blueprint": {
+    "Name": "Painted slopes fixture",
+    "GameVersion": "3.8.5.11",
+    "LocalPosition": "0,0,0",
+    "LocalRotation": "0,0,0,1",
+    "SCs": [],
+    "BLP": [
+      "0,0,0",
+      "2,0,0",
+      "4,0,0",
+      "6,0,0",
+      "8,0,0",
+      "10,0,0"
+    ],
+    "BLR": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "BlockIds": [
+      0,
+      0,
+      0,
+      0,
+      1,
+      2
+    ],
+    "BCI": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "COL": [
+      "0.65,0.05,0.05,1",
+      "0.9,0.9,0.9,1",
+      "0.1,0.1,0.7,1",
+      "0.08,0.08,0.1,1",
+      "0.1,0.8,0.8,1",
+      "0.65,0.05,0.05,1"
+    ],
+    "TotalBlockCount": 6,
+    "AliveCount": 6
+  }
+}

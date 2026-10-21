@@ -1,0 +1,133 @@
+{
+  "description": "Original four-block schema fixture, authored for FromTheCraft. Source-derived Copycats+3.0.4 / Minecraft1.21.1 format; not captured in game.",
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "state": {
+        "Name": "copycats:copycat_stairs",
+        "Properties": {
+          "facing": "north",
+          "half": "bottom",
+          "shape": "straight",
+          "waterlogged": "false"
+        }
+      },
+      "nbt": {
+        "id": "copycats:copycat",
+        "Material": {
+          "Name": "minecraft:red_concrete"
+        },
+        "Item": {
+          "id": "minecraft:red_concrete",
+          "count": 1
+        },
+        "EnableCT": true
+      }
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "state": {
+        "Name": "copycats:copycat_stairs",
+        "Properties": {
+          "facing": "east",
+          "half": "top",
+          "shape": "outer_left",
+          "waterlogged": "false"
+        }
+      },
+      "nbt": {
+        "id": "copycats:copycat",
+        "Material": {
+          "Name": "minecraft:glass"
+        },
+        "Item": {
+          "id": "minecraft:glass",
+          "count": 1
+        },
+        "EnableCT": true
+      }
+    },
+    {
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "state": {
+        "Name": "copycats:copycat_slab",
+        "Properties": {
+          "axis": "y",
+          "type": "bottom",
+          "waterlogged": "false"
+        }
+      },
+      "nbt": {
+        "id": "copycats:multistate_copycat",
+        "material_data": {
+          "bottom": {
+            "material": {
+              "Name": "minecraft:blue_concrete"
+            },
+            "consumedItem": {
+              "id": "minecraft:blue_concrete",
+              "count": 1
+            },
+            "enableCT": true
+          },
+          "top": {
+            "material": {
+              "Name": "create:copycat_base"
+            },
+            "consumedItem": {},
+            "enableCT": true
+          }
+        }
+      }
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "state": {
+        "Name": "copycats:copycat_slab",
+        "Properties": {
+          "axis": "y",
+          "type": "top",
+          "waterlogged": "false"
+        }
+      },
+      "nbt": {
+        "id": "copycats:multistate_copycat",
+        "material_data": {
+          "bottom": {
+            "material": {
+              "Name": "create:copycat_base"
+            },
+            "consumedItem": {},
+            "enableCT": true
+          },
+          "top": {
+            "material": {
+              "Name": "minecraft:cyan_stained_glass"
+            },
+            "consumedItem": {
+              "id": "minecraft:cyan_stained_glass",
+              "count": 1
+            },
+            "enableCT": true
+          }
+        }
+      }
+    }
+  ]
+}

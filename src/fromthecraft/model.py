@@ -14,6 +14,7 @@ DATA_VERSION = 3955
 class State:
     name: str
     properties: tuple[tuple[str, str], ...] = ()
+    copied_material: "State | None" = None
 
 
 @dataclass

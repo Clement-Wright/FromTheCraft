@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from .model import State
+from .compatibility import MODS, MOD_BLOCKS, MOD_STATES, VARIANTS
 
 REGISTRY = json.loads((Path(__file__).with_name("data") / "minecraft_1_21_1.json").read_text())
 BLOCKS = {"minecraft:" + b["name"]: b for b in REGISTRY["blocks"]}
@@ -30,6 +31,8 @@ DYES = {
 
 
 def mc_policy(name):
+    if name in MOD_STATES:
+        return "mapped", "verified mod building block"
     if name not in BLOCKS:
         return "unrecognized", "placeholder"
     short = name.split(":", 1)[1]
@@ -49,6 +52,12 @@ def mc_policy(name):
 
 
 def validate_state(state: State):
+    if state.name in MOD_STATES:
+        rules = MOD_STATES[state.name]
+        for key, value in state.properties:
+            if key not in rules or value not in rules[key]:
+                raise ValueError(f"Invalid verified mod state {state.name}[{key}={value}]")
+        return
     entry = BLOCKS.get(state.name)
     if entry is None:
         return
@@ -88,6 +97,9 @@ def nearest_color(family, color):
 
 
 def mc_material(name):
+    entry = MOD_BLOCKS.get(name) or VARIANTS.get(name)
+    if entry:
+        return entry["material"], tuple(entry["rgb"])
     short = name.split(":", 1)[-1]
     color = (0.5, 0.5, 0.5)
     for dye, rgb in sorted(DYES.items(), key=lambda pair: -len(pair[0])):
@@ -114,22 +126,60 @@ def mc_material(name):
     return "Stone", color
 
 
-def mc_target(part, preference):
-    base = mc_target_material(part, preference)
-    if part.transparent:
+@lru_cache(maxsize=4096)
+def mod_target(base, material, color, transparent, preference, mods):
+    if transparent:
         return base
-    if part.shape.startswith("slab_") or part.shape.startswith("step_"):
-        stem = base.name.removesuffix("_planks")
-        suffix = "_slab" if part.shape.startswith("slab_") else "_stairs"
-        if stem + suffix not in BLOCKS:
-            return base
+    choices = [block for slug in mods for block in MODS[slug]["blocks"]]
+    if preference == "material" or (material in {"Wood", "Reinforced Wood"} and preference != "color"):
+        family = "Wood" if material == "Reinforced Wood" else material
+        choices = [block for block in choices if block["material"] == family]
+
+    def distance(rgb):
+        return sum((a - b) ** 2 for a, b in zip(rgb, color))
+
+    best = min(choices, key=lambda block: distance(block["rgb"]), default=None)
+    if best and distance(best["rgb"]) < distance(mc_material(base.name)[1]):
+        return State(best["name"], tuple(sorted(best["properties"].items())))
+    return base
+
+
+def mc_target(part, preference, mods=()):
+    base = mc_target_material(part, preference)
+    if mods:
+        base = mod_target(base, part.material, tuple(part.color), part.transparent, preference, mods)
+    partial = part.shape.startswith(("slab_", "step_"))
+    if partial and "copycats" in mods:
         if part.shape.startswith("slab_"):
             return State(
-                stem + suffix, (("type", part.shape.split("_")[1]), ("waterlogged", "false"))
+                "copycats:copycat_slab",
+                tuple(
+                    sorted({"axis": "y", "type": part.shape.split("_")[1], "waterlogged": "false"}.items())
+                ),
+                copied_material=base,
             )
         _, facing, half = part.shape.split("_")
         return State(
-            stem + suffix,
+            "copycats:copycat_stairs",
+            tuple(
+                sorted({"facing": facing, "half": half, "shape": "straight", "waterlogged": "false"}.items())
+            ),
+            copied_material=base,
+        )
+    if part.transparent:
+        return base
+    if partial:
+        stem = base.name.removesuffix("_planks")
+        suffix = "_slab" if part.shape.startswith("slab_") else "_stairs"
+        entry = MOD_BLOCKS.get(base.name)
+        name = entry.get("slab" if suffix == "_slab" else "stairs") if entry else stem + suffix
+        if not name or name not in BLOCKS and name not in MOD_STATES:
+            return base
+        if part.shape.startswith("slab_"):
+            return State(name, (("type", part.shape.split("_")[1]), ("waterlogged", "false")))
+        _, facing, half = part.shape.split("_")
+        return State(
+            name,
             tuple(
                 sorted({"facing": facing, "half": half, "shape": "straight", "waterlogged": "false"}.items())
             ),

@@ -7,6 +7,7 @@ from .ftd import read_blueprint, write_blueprint
 from .minecraft import read_litematic, read_structure, write_litematic, write_structure
 from .model import Result
 from .palettes import mc_target
+from .compatibility import MODS, selected_mods
 
 
 def convert(
@@ -18,7 +19,9 @@ def convert(
     cancelled=None,
     hollow=False,
     shell_thickness=1,
+    mods=(),
 ):
+    mods = selected_mods(mods)
     if scale not in (0.25, 0.5, 1, 2, 4):
         raise ValueError("Scale must be 0.25, 0.5, 1, 2, or 4")
     if preference not in {"balanced", "material", "color"}:
@@ -49,11 +52,25 @@ def convert(
         notices["FtD output schema targets reference version 3.8.5.11; in-game acceptance is unverified"] += 1
         return Result(content, read_blueprint(content), output, offset, notices)
     for part in cells.values():
-        if part.transparent and part.shape.startswith(("slab_", "step_")):
+        if "copycats" not in mods and part.transparent and part.shape.startswith(("slab_", "step_")):
             notices[
                 "Approximated partial glass with full transparent blocks; vanilla has no glass slabs or stairs"
             ] += 1
-    states = {p: mc_target(part, preference) for p, part in cells.items()}
+    states = {p: mc_target(part, preference, mods) for p, part in cells.items()}
+    full_fallbacks = sum(
+        part.shape.startswith(("slab_", "step_"))
+        and not states[pos].copied_material
+        and not states[pos].name.endswith(("_slab", "_stairs"))
+        for pos, part in cells.items()
+    )
+    if full_fallbacks:
+        notices["Used matching full blocks where the selected material has no slab or stair"] += (
+            full_fallbacks
+        )
+    if mods:
+        notices[
+            "Export requires these selected mods: " + ", ".join(MODS[slug]["label"] for slug in mods)
+        ] += 1
     size = tuple(np.max(list(cells), axis=0) + 1)
     writer, reader = (
         (write_structure, read_structure) if output == "nbt" else (write_litematic, read_litematic)

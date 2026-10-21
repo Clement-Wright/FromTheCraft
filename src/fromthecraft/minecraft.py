@@ -5,11 +5,12 @@ from collections import Counter
 
 import nbtlib as nbt
 import numpy as np
-from litemapy import BlockState, Region, Schematic
+from litemapy import BlockState, Region, Schematic, TileEntity
 
 from .geometry import checked_size
 from .model import DATA_VERSION, MAX_PARTS, MAX_VOLUME, Part, Scene, State
 from .palettes import mc_material, mc_policy, validate_state
+from .copycats import block_entity, block_state_tag, read_material
 
 MAX_BYTES = 128 * 1024**2
 
@@ -78,13 +79,15 @@ def write_structure(cells: dict, size) -> bytes:
     palette, indices, blocks = [], {}, []
     for position, state in sorted(cells.items()):
         validate_state(state)
-        if state not in indices:
-            indices[state] = len(palette)
-            entry = nbt.Compound({"Name": nbt.String(state.name)})
-            if state.properties:
-                entry["Properties"] = nbt.Compound({k: nbt.String(v) for k, v in state.properties})
-            palette.append(entry)
-        blocks.append(nbt.Compound({"pos": nbt.List[nbt.Int](position), "state": nbt.Int(indices[state])}))
+        bare = State(state.name, state.properties)
+        if bare not in indices:
+            indices[bare] = len(palette)
+            palette.append(block_state_tag(bare))
+        block = nbt.Compound({"pos": nbt.List[nbt.Int](position), "state": nbt.Int(indices[bare])})
+        entity = block_entity(state, position)
+        if entity is not None:
+            block["nbt"] = entity
+        blocks.append(block)
     root = nbt.File(
         {
             "DataVersion": nbt.Int(DATA_VERSION),
@@ -115,9 +118,7 @@ def read_structure(content: bytes):
             pos = tuple(int(n) for n in block["pos"])
             if len(pos) != 3 or any(abs(n) > 100_000 for n in pos):
                 raise ValueError("Invalid structure block position")
-            accept(cells, pos, BlockState.from_nbt(root["palette"][index]), notices)
-            if "nbt" in block:
-                notices["Intentionally skipped block entity data (inventories, commands, gameplay)"] += 1
+            accept(cells, pos, BlockState.from_nbt(root["palette"][index]), notices, block.get("nbt"))
         if root.get("entities"):
             notices["Intentionally skipped entities"] += len(root["entities"])
     except (KeyError, TypeError, IndexError) as exc:
@@ -132,7 +133,7 @@ def check_version(version):
         )
 
 
-def accept(cells, position, block, notices):
+def accept(cells, position, block, notices, entity=None):
     state = State(block.id, tuple(sorted((str(k), str(v)) for k, v in block.properties())))
     validate_state(state)
     policy, family = mc_policy(state.name)
@@ -140,6 +141,7 @@ def accept(cells, position, block, notices):
         if family != "air":
             notices[f"Intentionally skipped {family}: {state.name}"] += 1
         return
+    state = read_material(state, entity, notices)
     if position in cells:
         if cells[position] != state:
             notices["Overlapping occupied cells: first region/block wins"] += 1
@@ -158,13 +160,14 @@ def scene_from_cells(cells, format, notices):
     for position, state in cells.items():
         transform = np.eye(4)
         transform[:3, 3] = position
-        material, color = mc_material(state.name)
+        material, color = mc_material((state.copied_material or state).name)
         shape, size = "box", (1, 1, 1)
         props = dict(state.properties)
         if state.name.endswith("_slab") and props.get("type", "bottom") != "double":
-            size = (1, 0.5, 1)
+            axis = "xyz".index(props.get("axis", "y")) if state.name == "copycats:copycat_slab" else 1
+            size = tuple(0.5 if index == axis else 1 for index in range(3))
             if props.get("type") == "top":
-                transform[1, 3] += 0.5
+                transform[axis, 3] += 0.5
         elif state.name.endswith("_stairs"):
             shape = "stairs_" + props.get("shape", "straight")
             turn = {"south": 0, "east": 1, "north": 2, "west": 3}[props.get("facing", "north")]
@@ -217,8 +220,8 @@ def read_litematic(content):
     root = parse_nbt(content)
     try:
         check_version(root["MinecraftDataVersion"])
-        if int(root["Version"]) not in (5, 6):
-            raise ValueError("Only Litematic format versions 5 and 6 are supported")
+        if int(root["Version"]) not in (5, 6, 7):
+            raise ValueError("Only Litematic format versions 5, 6 and 7 are supported")
         volume = 0
         for region in root["Regions"].values():
             size = checked_size([abs(int(region["Size"][a])) for a in "xyz"])
@@ -228,14 +231,21 @@ def read_litematic(content):
         schematic = Schematic.from_nbt(root)
         cells, notices = {}, Counter()
         for region in schematic.regions.values():
+            minimum = (region.min_x(), region.min_y(), region.min_z())
+            entities = {
+                tuple(coordinate + low for coordinate, low in zip(entity.position, minimum)): entity.data
+                for entity in region.tile_entities
+            }
             for x, y, z in region.block_positions():
-                accept(cells, (region.x + x, region.y + y, region.z + z), region[x, y, z], notices)
+                accept(
+                    cells,
+                    (region.x + x, region.y + y, region.z + z),
+                    region[x, y, z],
+                    notices,
+                    entities.get((x, y, z)),
+                )
             if region.entities:
                 notices["Intentionally skipped entities"] += len(region.entities)
-            if region.tile_entities:
-                notices["Intentionally skipped block entity data (inventories, commands, gameplay)"] += len(
-                    region.tile_entities
-                )
         return scene_from_cells(cells, "litematic", notices)
     except (KeyError, TypeError, IndexError) as exc:
         raise ValueError(f"Malformed Litematic: {exc}") from exc
@@ -247,6 +257,9 @@ def write_litematic(cells, size):
     for pos, state in cells.items():
         validate_state(state)
         region[pos] = BlockState(state.name, **dict(state.properties))
+        entity = block_entity(state, pos)
+        if entity is not None:
+            region.tile_entities.append(TileEntity(entity))
     root = Schematic(name="FromTheCraft", regions={"Structure": region}, mc_version=DATA_VERSION).to_nbt()
     stream = io.BytesIO()
     nbt.File(root).write(stream)

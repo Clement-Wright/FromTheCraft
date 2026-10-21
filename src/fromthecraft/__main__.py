@@ -3,6 +3,7 @@ from pathlib import Path
 
 from .convert import convert
 from .convert import read_file
+from .compatibility import MODS
 
 
 def main():
@@ -27,6 +28,13 @@ def main():
         "--hollow", action="store_true", help="Keep an exterior shell and remove enclosed parts"
     )
     conversion.add_argument("--shell-thickness", type=int, choices=[1, 2, 3, 4], default=1)
+    conversion.add_argument(
+        "--mod",
+        action="append",
+        choices=sorted(MODS),
+        default=[],
+        help="Installed Minecraft mod; repeat for each add-on (default: vanilla only)",
+    )
     args = parser.parse_args()
     if args.command is None:
         from .launch import launch
@@ -44,6 +52,7 @@ def main():
             args.palette,
             hollow=args.hollow,
             shell_thickness=args.shell_thickness,
+            mods=args.mod,
         )
         with args.destination.open("xb") as target:
             target.write(result.content)

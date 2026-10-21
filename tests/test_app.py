@@ -53,6 +53,23 @@ def test_preview_is_exact_exported_serialization(client):
     assert client.get("/api/export", params={"result_id": status["result_id"]}).status_code == 409
 
 
+def test_selected_mods_reach_serialization_and_unknown_mods_are_rejected(client):
+    from fromthecraft.convert import read_file
+    from fromthecraft.preview import preview
+
+    choices = client.get("/api/session").json()["mod_choices"]
+    assert len(choices) == 8
+    assert {"copycats", "create-chipped", "chipped"} <= {mod["slug"] for mod in choices}
+    upload(client)
+    assert client.post("/api/convert", json={"format": "nbt", "mods": ["copycats"]}).status_code == 200
+    status = finished(client)
+    assert status["state"] == "ready", status
+    assert any("Copycats+" in message for message in status["notices"])
+    content = client.get("/api/export", params={"result_id": status["result_id"]}).content
+    assert preview(read_file(content, "nbt"), status["offset"]) == status["converted"]
+    assert client.post("/api/convert", json={"format": "nbt", "mods": ["unknown-mod"]}).status_code == 422
+
+
 def test_cancel_replace_failure_and_empty_output_recover(client):
     import json
 

@@ -1,0 +1,2700 @@
+{
+  "minecraft_version": "1.21.1",
+  "loader": "neoforge",
+  "method": "Solid full cube models verified from pinned jars; RGB is arithmetic sRGB mean over frame-zero effectively opaque pixels (alpha >=254), area weighted over six cube faces. No textures or assets redistributed. Stair/slab IDs proven present and matching exact base texture set or direct shaped crafting recipe. State rules extracted from visual blockstate variants, supplemented by standard StairBlock/SlabBlock waterlogged Boolean (omitted in visual variants because it does not change models).",
+  "mods": [
+    {
+      "slug": "create",
+      "label": "Create",
+      "namespace": "create",
+      "version": "6.0.10+mc1.21.1",
+      "loader": "neoforge",
+      "license": "LicenseRef-Create-Mod-License",
+      "source": "https://github.com/Creators-of-Create/Create",
+      "release_url": "https://modrinth.com/mod/create/version/UjX6dr61",
+      "sha512": "11cc8fc049d2f67f6548c7abfada6b82a3adb5c7ca410a742de04bbca76e03862c518721b88d806f6e6d768a4d68531fdb903a85859b25d1484d550cc7bafd4b",
+      "embedded_version": "6.0.10",
+      "embedded_license": "Read attached LICENSE.md",
+      "embedded_dependencies": [
+        {
+          "modId": "neoforge",
+          "type": "required",
+          "versionRange": "[21.1.219,)",
+          "ordering": "NONE",
+          "side": "BOTH"
+        },
+        {
+          "modId": "minecraft",
+          "type": "required",
+          "versionRange": "[1.21.1]",
+          "ordering": "NONE",
+          "side": "BOTH"
+        },
+        {
+          "modId": "flywheel",
+          "type": "required",
+          "versionRange": "[1.0.0,2.0)",
+          "ordering": "AFTER",
+          "side": "CLIENT"
+        },
+        {
+          "modId": "ponder",
+          "type": "required",
+          "versionRange": "[1.0.82,)",
+          "ordering": "AFTER",
+          "side": "BOTH"
+        },
+        {
+          "modId": "sodium",
+          "type": "optional",
+          "reason": "Versions before 0.6.9 do not include the neccesary APIs Create needs to work properly with Sodium.",
+          "versionRange": "[0.6.9,)",
+          "ordering": "NONE",
+          "side": "CLIENT"
+        },
+        {
+          "modId": "lithium",
+          "type": "optional",
+          "reason": "Versions before 0.14.7 crash when paired with Create, Update Lithium.",
+          "versionRange": "[0.14.7,)",
+          "ordering": "NONE",
+          "side": "BOTH"
+        },
+        {
+          "modId": "journeymap",
+          "type": "optional",
+          "reason": "Versions before 1.21.1-6.0.0-beta.46 do not contain the APIs Create requires to work with JourneyMap.",
+          "versionRange": "[1.21.1-6.0.0-beta.46,)",
+          "ordering": "NONE",
+          "side": "CLIENT"
+        },
+        {
+          "modId": "xaeroworldmap",
+          "type": "optional",
+          "reason": "Versions before 1.40.2 do not contain the classes Create requires to work with Xaero's World Map.",
+          "versionRange": "[1.40.2,)",
+          "ordering": "NONE",
+          "side": "CLIENT"
+        },
+        {
+          "modId": "radium",
+          "type": "incompatible",
+          "reason": "Radium is a unofficial port of Lithium, Lithium is now natively available for NeoForge and does not suffer from the same issues radium does, use Lithium instead.",
+          "ordering": "NONE",
+          "side": "BOTH"
+        },
+        {
+          "modId": "palladium",
+          "type": "incompatible",
+          "reason": "Palladium does not improve memory usage by anything meaningful, and results in broken visuals for Create's blocks with connected textures.",
+          "ordering": "NONE",
+          "side": "BOTH"
+        }
+      ],
+      "license_note": "Pinned jar LICENSE.md_create-1.21.1 states MIT code and All Rights Reserved assets.",
+      "dependencies": [],
+      "blocks": [
+        {
+          "name": "create:industrial_iron_block",
+          "rgb": [
+            0.31706,
+            0.309937,
+            0.314542
+          ],
+          "material": "Metal",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "create-1.21.1-6.0.10.jar",
+            "blockstate": "assets/create/blockstates/industrial_iron_block.json",
+            "model": "create:block/industrial_iron_block",
+            "model_parent": "minecraft:block/cube_column",
+            "texture_samples": [
+              "create:block/industrial_iron_block_top",
+              "create:block/industrial_iron_block"
+            ]
+          }
+        },
+        {
+          "name": "create:weathered_iron_block",
+          "rgb": [
+            0.339665,
+            0.294383,
+            0.24689
+          ],
+          "material": "Metal",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "create-1.21.1-6.0.10.jar",
+            "blockstate": "assets/create/blockstates/weathered_iron_block.json",
+            "model": "create:block/weathered_iron_block",
+            "model_parent": "minecraft:block/cube_column",
+            "texture_samples": [
+              "create:block/weathered_iron_block_top",
+              "create:block/weathered_iron_block"
+            ]
+          }
+        },
+        {
+          "name": "create:andesite_casing",
+          "rgb": [
+            0.419914,
+            0.36708,
+            0.286749
+          ],
+          "material": "Metal",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "create-1.21.1-6.0.10.jar",
+            "blockstate": "assets/create/blockstates/andesite_casing.json",
+            "model": "create:block/andesite_casing",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "create:block/andesite_casing"
+            ]
+          }
+        },
+        {
+          "name": "create:brass_casing",
+          "rgb": [
+            0.457368,
+            0.331587,
+            0.189246
+          ],
+          "material": "Metal",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "create-1.21.1-6.0.10.jar",
+            "blockstate": "assets/create/blockstates/brass_casing.json",
+            "model": "create:block/brass_casing",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "create:block/brass_casing"
+            ]
+          }
+        },
+        {
+          "name": "create:copper_casing",
+          "rgb": [
+            0.508241,
+            0.35625,
+            0.305392
+          ],
+          "material": "Metal",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "create-1.21.1-6.0.10.jar",
+            "blockstate": "assets/create/blockstates/copper_casing.json",
+            "model": "create:block/copper_casing",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "create:block/copper_casing"
+            ]
+          }
+        },
+        {
+          "name": "create:cut_limestone",
+          "rgb": [
+            0.761121,
+            0.750123,
+            0.698269
+          ],
+          "material": "Stone",
+          "stairs": "create:cut_limestone_stairs",
+          "slab": "create:cut_limestone_slab",
+          "properties": {},
+          "evidence": {
+            "jar": "create-1.21.1-6.0.10.jar",
+            "blockstate": "assets/create/blockstates/cut_limestone.json",
+            "model": "create:block/cut_limestone",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "create:block/palettes/stone_types/cut/limestone_cut"
+            ],
+            "stairs_blockstate": "assets/create/blockstates/cut_limestone_stairs.json",
+            "stairs_model": "create:block/cut_limestone_stairs_inner",
+            "slab_blockstate": "assets/create/blockstates/cut_limestone_slab.json",
+            "slab_model": "create:block/cut_limestone_slab"
+          }
+        },
+        {
+          "name": "create:cut_asurine",
+          "rgb": [
+            0.318474,
+            0.396967,
+            0.510861
+          ],
+          "material": "Stone",
+          "stairs": "create:cut_asurine_stairs",
+          "slab": "create:cut_asurine_slab",
+          "properties": {},
+          "evidence": {
+            "jar": "create-1.21.1-6.0.10.jar",
+            "blockstate": "assets/create/blockstates/cut_asurine.json",
+            "model": "create:block/cut_asurine",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "create:block/palettes/stone_types/cut/asurine_cut"
+            ],
+            "stairs_blockstate": "assets/create/blockstates/cut_asurine_stairs.json",
+            "stairs_model": "create:block/cut_asurine_stairs_inner",
+            "slab_blockstate": "assets/create/blockstates/cut_asurine_slab.json",
+            "slab_model": "create:block/cut_asurine_slab"
+          }
+        },
+        {
+          "name": "create:cut_crimsite",
+          "rgb": [
+            0.467142,
+            0.172059,
+            0.220512
+          ],
+          "material": "Stone",
+          "stairs": "create:cut_crimsite_stairs",
+          "slab": "create:cut_crimsite_slab",
+          "properties": {},
+          "evidence": {
+            "jar": "create-1.21.1-6.0.10.jar",
+            "blockstate": "assets/create/blockstates/cut_crimsite.json",
+            "model": "create:block/cut_crimsite",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "create:block/palettes/stone_types/cut/crimsite_cut"
+            ],
+            "stairs_blockstate": "assets/create/blockstates/cut_crimsite_stairs.json",
+            "stairs_model": "create:block/cut_crimsite_stairs_inner",
+            "slab_blockstate": "assets/create/blockstates/cut_crimsite_slab.json",
+            "slab_model": "create:block/cut_crimsite_slab"
+          }
+        },
+        {
+          "name": "create:cut_ochrum",
+          "rgb": [
+            0.63871,
+            0.489216,
+            0.311397
+          ],
+          "material": "Stone",
+          "stairs": "create:cut_ochrum_stairs",
+          "slab": "create:cut_ochrum_slab",
+          "properties": {},
+          "evidence": {
+            "jar": "create-1.21.1-6.0.10.jar",
+            "blockstate": "assets/create/blockstates/cut_ochrum.json",
+            "model": "create:block/cut_ochrum",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "create:block/palettes/stone_types/cut/ochrum_cut"
+            ],
+            "stairs_blockstate": "assets/create/blockstates/cut_ochrum_stairs.json",
+            "stairs_model": "create:block/cut_ochrum_stairs_inner",
+            "slab_blockstate": "assets/create/blockstates/cut_ochrum_slab.json",
+            "slab_model": "create:block/cut_ochrum_slab"
+          }
+        },
+        {
+          "name": "create:cut_veridium",
+          "rgb": [
+            0.124188,
+            0.394638,
+            0.330208
+          ],
+          "material": "Stone",
+          "stairs": "create:cut_veridium_stairs",
+          "slab": "create:cut_veridium_slab",
+          "properties": {},
+          "evidence": {
+            "jar": "create-1.21.1-6.0.10.jar",
+            "blockstate": "assets/create/blockstates/cut_veridium.json",
+            "model": "create:block/cut_veridium",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "create:block/palettes/stone_types/cut/veridium_cut"
+            ],
+            "stairs_blockstate": "assets/create/blockstates/cut_veridium_stairs.json",
+            "stairs_model": "create:block/cut_veridium_stairs_inner",
+            "slab_blockstate": "assets/create/blockstates/cut_veridium_slab.json",
+            "slab_model": "create:block/cut_veridium_slab"
+          }
+        },
+        {
+          "name": "create:cut_scoria",
+          "rgb": [
+            0.276333,
+            0.20599,
+            0.189231
+          ],
+          "material": "Stone",
+          "stairs": "create:cut_scoria_stairs",
+          "slab": "create:cut_scoria_slab",
+          "properties": {},
+          "evidence": {
+            "jar": "create-1.21.1-6.0.10.jar",
+            "blockstate": "assets/create/blockstates/cut_scoria.json",
+            "model": "create:block/cut_scoria",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "create:block/palettes/stone_types/cut/scoria_cut"
+            ],
+            "stairs_blockstate": "assets/create/blockstates/cut_scoria_stairs.json",
+            "stairs_model": "create:block/cut_scoria_stairs_inner",
+            "slab_blockstate": "assets/create/blockstates/cut_scoria_slab.json",
+            "slab_model": "create:block/cut_scoria_slab"
+          }
+        },
+        {
+          "name": "create:cut_scorchia",
+          "rgb": [
+            0.208272,
+            0.221201,
+            0.235892
+          ],
+          "material": "Stone",
+          "stairs": "create:cut_scorchia_stairs",
+          "slab": "create:cut_scorchia_slab",
+          "properties": {},
+          "evidence": {
+            "jar": "create-1.21.1-6.0.10.jar",
+            "blockstate": "assets/create/blockstates/cut_scorchia.json",
+            "model": "create:block/cut_scorchia",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "create:block/palettes/stone_types/cut/scorchia_cut"
+            ],
+            "stairs_blockstate": "assets/create/blockstates/cut_scorchia_stairs.json",
+            "stairs_model": "create:block/cut_scorchia_stairs_inner",
+            "slab_blockstate": "assets/create/blockstates/cut_scorchia_slab.json",
+            "slab_model": "create:block/cut_scorchia_slab"
+          }
+        }
+      ],
+      "states": {
+        "create:industrial_iron_block": {},
+        "create:weathered_iron_block": {},
+        "create:andesite_casing": {},
+        "create:brass_casing": {},
+        "create:copper_casing": {},
+        "create:cut_limestone": {},
+        "create:cut_limestone_stairs": {
+          "facing": [
+            "east",
+            "north",
+            "south",
+            "west"
+          ],
+          "half": [
+            "bottom",
+            "top"
+          ],
+          "shape": [
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right",
+            "straight"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "create:cut_limestone_slab": {
+          "type": [
+            "bottom",
+            "double",
+            "top"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "create:cut_asurine": {},
+        "create:cut_asurine_stairs": {
+          "facing": [
+            "east",
+            "north",
+            "south",
+            "west"
+          ],
+          "half": [
+            "bottom",
+            "top"
+          ],
+          "shape": [
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right",
+            "straight"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "create:cut_asurine_slab": {
+          "type": [
+            "bottom",
+            "double",
+            "top"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "create:cut_crimsite": {},
+        "create:cut_crimsite_stairs": {
+          "facing": [
+            "east",
+            "north",
+            "south",
+            "west"
+          ],
+          "half": [
+            "bottom",
+            "top"
+          ],
+          "shape": [
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right",
+            "straight"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "create:cut_crimsite_slab": {
+          "type": [
+            "bottom",
+            "double",
+            "top"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "create:cut_ochrum": {},
+        "create:cut_ochrum_stairs": {
+          "facing": [
+            "east",
+            "north",
+            "south",
+            "west"
+          ],
+          "half": [
+            "bottom",
+            "top"
+          ],
+          "shape": [
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right",
+            "straight"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "create:cut_ochrum_slab": {
+          "type": [
+            "bottom",
+            "double",
+            "top"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "create:cut_veridium": {},
+        "create:cut_veridium_stairs": {
+          "facing": [
+            "east",
+            "north",
+            "south",
+            "west"
+          ],
+          "half": [
+            "bottom",
+            "top"
+          ],
+          "shape": [
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right",
+            "straight"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "create:cut_veridium_slab": {
+          "type": [
+            "bottom",
+            "double",
+            "top"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "create:cut_scoria": {},
+        "create:cut_scoria_stairs": {
+          "facing": [
+            "east",
+            "north",
+            "south",
+            "west"
+          ],
+          "half": [
+            "bottom",
+            "top"
+          ],
+          "shape": [
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right",
+            "straight"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "create:cut_scoria_slab": {
+          "type": [
+            "bottom",
+            "double",
+            "top"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "create:cut_scorchia": {},
+        "create:cut_scorchia_stairs": {
+          "facing": [
+            "east",
+            "north",
+            "south",
+            "west"
+          ],
+          "half": [
+            "bottom",
+            "top"
+          ],
+          "shape": [
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right",
+            "straight"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "create:cut_scorchia_slab": {
+          "type": [
+            "bottom",
+            "double",
+            "top"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        }
+      },
+      "state_evidence_note": "Variant properties from exact jar blockstates. Stair/slab waterlogged Boolean inherited from standard Minecraft StairBlock/SlabBlock, independent of visual variants."
+    },
+    {
+      "slug": "copycats",
+      "label": "Create: Copycats+",
+      "namespace": "copycats",
+      "version": "3.0.4+mc1.21.1",
+      "loader": "neoforge",
+      "license": "All Rights Reserved",
+      "source": "https://github.com/copycats-plus/copycats/tree/9f808ac0b437817696c50f2e8b57f590b1196094",
+      "dependencies": [
+        "create"
+      ],
+      "blocks": [],
+      "states": {
+        "copycats:copycat_stairs": {
+          "facing": [
+            "north",
+            "south",
+            "east",
+            "west"
+          ],
+          "half": [
+            "top",
+            "bottom"
+          ],
+          "shape": [
+            "straight",
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "copycats:copycat_slab": {
+          "axis": [
+            "x",
+            "y",
+            "z"
+          ],
+          "type": [
+            "top",
+            "bottom",
+            "double"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        }
+      }
+    },
+    {
+      "slug": "create-design-n-decor",
+      "label": "Create: Design n' Decor",
+      "namespace": "dndecor",
+      "version": "2.2b",
+      "loader": "neoforge",
+      "license": "LicenseRef-MIT-Code-AND-ARR-Art",
+      "source": "https://github.com/DrMango14/Create-Design-n-Decor",
+      "release_url": "https://modrinth.com/mod/create-design-n-decor/version/uQsIRky8",
+      "sha512": "d888553c8a254c3654f8da2ae2cae0bb642594546c71988739c93bf6b18668145e0ce5b1c20ae0544b9b6019f17e4da944bd5bc17e4c6b73e7f1374cfa2c9db9",
+      "embedded_version": "2.2b",
+      "embedded_license": "MIT & ARR",
+      "embedded_dependencies": [
+        {
+          "modId": "neoforge",
+          "type": "required",
+          "versionRange": "[21.1.200,)",
+          "ordering": "NONE",
+          "side": "BOTH"
+        },
+        {
+          "modId": "minecraft",
+          "type": "required",
+          "versionRange": "[1.21.1]",
+          "ordering": "NONE",
+          "side": "BOTH"
+        },
+        {
+          "modId": "flywheel",
+          "type": "required",
+          "versionRange": "[1.0.0,2.0)",
+          "ordering": "AFTER",
+          "side": "CLIENT"
+        },
+        {
+          "modId": "ponder",
+          "type": "required",
+          "versionRange": "[0.8,)",
+          "ordering": "AFTER",
+          "side": "BOTH"
+        },
+        {
+          "modId": "create",
+          "type": "required",
+          "versionRange": "[6.0.4,)",
+          "ordering": "AFTER",
+          "side": "BOTH"
+        }
+      ],
+      "dependencies": [
+        "create"
+      ],
+      "blocks": [
+        {
+          "name": "dndecor:dark_metal_block",
+          "rgb": [
+            0.28151,
+            0.277619,
+            0.283364
+          ],
+          "material": "Metal",
+          "stairs": "dndecor:dark_metal_block_stairs",
+          "slab": "dndecor:dark_metal_block_slab",
+          "properties": {},
+          "evidence": {
+            "jar": "Design-n-Decor-1.21.1-2.2b.jar",
+            "blockstate": "assets/dndecor/blockstates/dark_metal_block.json",
+            "model": "dndecor:block/dark_metal_block",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "dndecor:block/dark_metal_block"
+            ],
+            "stairs_blockstate": "assets/dndecor/blockstates/dark_metal_block_stairs.json",
+            "stairs_model": "dndecor:block/dark_metal_block_stairs_inner",
+            "slab_recipe": "data/dndecor/recipe/crafting/dark_metal_block_slab_from_dark_metal_block_slab.json",
+            "slab_blockstate": "assets/dndecor/blockstates/dark_metal_block_slab.json",
+            "slab_model": "dndecor:block/dark_metal_block_slab"
+          }
+        },
+        {
+          "name": "dndecor:white_sheet_metal",
+          "rgb": [
+            0.735789,
+            0.739716,
+            0.745394
+          ],
+          "material": "Metal",
+          "stairs": null,
+          "slab": null,
+          "properties": {
+            "axis": "y"
+          },
+          "evidence": {
+            "jar": "Design-n-Decor-1.21.1-2.2b.jar",
+            "blockstate": "assets/dndecor/blockstates/white_sheet_metal.json",
+            "model": "dndecor:block/white_sheet_metal",
+            "model_parent": "minecraft:block/cube_column",
+            "texture_samples": [
+              "dndecor:block/sheet_metals/white_top",
+              "dndecor:block/sheet_metals/white"
+            ]
+          }
+        },
+        {
+          "name": "dndecor:red_sheet_metal",
+          "rgb": [
+            0.67476,
+            0.179325,
+            0.245083
+          ],
+          "material": "Metal",
+          "stairs": null,
+          "slab": null,
+          "properties": {
+            "axis": "y"
+          },
+          "evidence": {
+            "jar": "Design-n-Decor-1.21.1-2.2b.jar",
+            "blockstate": "assets/dndecor/blockstates/red_sheet_metal.json",
+            "model": "dndecor:block/red_sheet_metal",
+            "model_parent": "minecraft:block/cube_column",
+            "texture_samples": [
+              "dndecor:block/sheet_metals/red_top",
+              "dndecor:block/sheet_metals/red"
+            ]
+          }
+        },
+        {
+          "name": "dndecor:blue_sheet_metal",
+          "rgb": [
+            0.282782,
+            0.45699,
+            0.67213
+          ],
+          "material": "Metal",
+          "stairs": null,
+          "slab": null,
+          "properties": {
+            "axis": "y"
+          },
+          "evidence": {
+            "jar": "Design-n-Decor-1.21.1-2.2b.jar",
+            "blockstate": "assets/dndecor/blockstates/blue_sheet_metal.json",
+            "model": "dndecor:block/blue_sheet_metal",
+            "model_parent": "minecraft:block/cube_column",
+            "texture_samples": [
+              "dndecor:block/sheet_metals/blue_top",
+              "dndecor:block/sheet_metals/blue"
+            ]
+          }
+        },
+        {
+          "name": "dndecor:yellow_sheet_metal",
+          "rgb": [
+            0.814216,
+            0.678135,
+            0.212286
+          ],
+          "material": "Metal",
+          "stairs": null,
+          "slab": null,
+          "properties": {
+            "axis": "y"
+          },
+          "evidence": {
+            "jar": "Design-n-Decor-1.21.1-2.2b.jar",
+            "blockstate": "assets/dndecor/blockstates/yellow_sheet_metal.json",
+            "model": "dndecor:block/yellow_sheet_metal",
+            "model_parent": "minecraft:block/cube_column",
+            "texture_samples": [
+              "dndecor:block/sheet_metals/yellow_top",
+              "dndecor:block/sheet_metals/yellow"
+            ]
+          }
+        },
+        {
+          "name": "dndecor:brass_sheet_metal",
+          "rgb": [
+            0.810978,
+            0.642637,
+            0.389277
+          ],
+          "material": "Metal",
+          "stairs": null,
+          "slab": null,
+          "properties": {
+            "axis": "y"
+          },
+          "evidence": {
+            "jar": "Design-n-Decor-1.21.1-2.2b.jar",
+            "blockstate": "assets/dndecor/blockstates/brass_sheet_metal.json",
+            "model": "dndecor:block/brass_sheet_metal",
+            "model_parent": "minecraft:block/cube_column",
+            "texture_samples": [
+              "dndecor:block/sheet_metals/brass_top",
+              "dndecor:block/sheet_metals/brass"
+            ]
+          }
+        },
+        {
+          "name": "dndecor:copper_sheet_metal",
+          "rgb": [
+            0.747518,
+            0.416268,
+            0.309334
+          ],
+          "material": "Metal",
+          "stairs": null,
+          "slab": null,
+          "properties": {
+            "axis": "y"
+          },
+          "evidence": {
+            "jar": "Design-n-Decor-1.21.1-2.2b.jar",
+            "blockstate": "assets/dndecor/blockstates/copper_sheet_metal.json",
+            "model": "dndecor:block/copper_sheet_metal",
+            "model_parent": "minecraft:block/cube_column",
+            "texture_samples": [
+              "dndecor:block/sheet_metals/copper_top",
+              "dndecor:block/sheet_metals/copper"
+            ]
+          }
+        },
+        {
+          "name": "dndecor:cut_amethyst",
+          "rgb": [
+            0.583073,
+            0.435003,
+            0.820711
+          ],
+          "material": "Stone",
+          "stairs": "dndecor:cut_amethyst_stairs",
+          "slab": "dndecor:cut_amethyst_slab",
+          "properties": {},
+          "evidence": {
+            "jar": "Design-n-Decor-1.21.1-2.2b.jar",
+            "blockstate": "assets/dndecor/blockstates/cut_amethyst.json",
+            "model": "dndecor:block/cut_amethyst",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "dndecor:block/palettes/stone_types/cut/amethyst_cut"
+            ],
+            "stairs_blockstate": "assets/dndecor/blockstates/cut_amethyst_stairs.json",
+            "stairs_model": "dndecor:block/cut_amethyst_stairs_inner",
+            "slab_blockstate": "assets/dndecor/blockstates/cut_amethyst_slab.json",
+            "slab_model": "dndecor:block/cut_amethyst_slab"
+          }
+        },
+        {
+          "name": "dndecor:cut_dolomite",
+          "rgb": [
+            0.83776,
+            0.842187,
+            0.827926
+          ],
+          "material": "Stone",
+          "stairs": "dndecor:cut_dolomite_stairs",
+          "slab": "dndecor:cut_dolomite_slab",
+          "properties": {},
+          "evidence": {
+            "jar": "Design-n-Decor-1.21.1-2.2b.jar",
+            "blockstate": "assets/dndecor/blockstates/cut_dolomite.json",
+            "model": "dndecor:block/cut_dolomite",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "dndecor:block/palettes/stone_types/cut/dolomite_cut"
+            ],
+            "stairs_blockstate": "assets/dndecor/blockstates/cut_dolomite_stairs.json",
+            "stairs_model": "dndecor:block/cut_dolomite_stairs_inner",
+            "slab_blockstate": "assets/dndecor/blockstates/cut_dolomite_slab.json",
+            "slab_model": "dndecor:block/cut_dolomite_slab"
+          }
+        },
+        {
+          "name": "dndecor:cut_gabbro",
+          "rgb": [
+            0.619838,
+            0.385386,
+            0.328125
+          ],
+          "material": "Stone",
+          "stairs": "dndecor:cut_gabbro_stairs",
+          "slab": "dndecor:cut_gabbro_slab",
+          "properties": {},
+          "evidence": {
+            "jar": "Design-n-Decor-1.21.1-2.2b.jar",
+            "blockstate": "assets/dndecor/blockstates/cut_gabbro.json",
+            "model": "dndecor:block/cut_gabbro",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "dndecor:block/palettes/stone_types/cut/gabbro_cut"
+            ],
+            "stairs_blockstate": "assets/dndecor/blockstates/cut_gabbro_stairs.json",
+            "stairs_model": "dndecor:block/cut_gabbro_stairs_inner",
+            "slab_blockstate": "assets/dndecor/blockstates/cut_gabbro_slab.json",
+            "slab_model": "dndecor:block/cut_gabbro_slab"
+          }
+        },
+        {
+          "name": "dndecor:cut_weathered_limestone",
+          "rgb": [
+            0.599709,
+            0.620404,
+            0.571645
+          ],
+          "material": "Stone",
+          "stairs": "dndecor:cut_weathered_limestone_stairs",
+          "slab": "dndecor:cut_weathered_limestone_slab",
+          "properties": {},
+          "evidence": {
+            "jar": "Design-n-Decor-1.21.1-2.2b.jar",
+            "blockstate": "assets/dndecor/blockstates/cut_weathered_limestone.json",
+            "model": "dndecor:block/cut_weathered_limestone",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "dndecor:block/palettes/stone_types/cut/weathered_limestone_cut"
+            ],
+            "stairs_blockstate": "assets/dndecor/blockstates/cut_weathered_limestone_stairs.json",
+            "stairs_model": "dndecor:block/cut_weathered_limestone_stairs_inner",
+            "slab_blockstate": "assets/dndecor/blockstates/cut_weathered_limestone_slab.json",
+            "slab_model": "dndecor:block/cut_weathered_limestone_slab"
+          }
+        },
+        {
+          "name": "dndecor:cut_packed_mud",
+          "rgb": [
+            0.517999,
+            0.384099,
+            0.297304
+          ],
+          "material": "Stone",
+          "stairs": "dndecor:cut_packed_mud_stairs",
+          "slab": "dndecor:cut_packed_mud_slab",
+          "properties": {},
+          "evidence": {
+            "jar": "Design-n-Decor-1.21.1-2.2b.jar",
+            "blockstate": "assets/dndecor/blockstates/cut_packed_mud.json",
+            "model": "dndecor:block/cut_packed_mud",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "dndecor:block/palettes/stone_types/cut/packed_mud_cut"
+            ],
+            "stairs_blockstate": "assets/dndecor/blockstates/cut_packed_mud_stairs.json",
+            "stairs_model": "dndecor:block/cut_packed_mud_stairs_inner",
+            "slab_blockstate": "assets/dndecor/blockstates/cut_packed_mud_slab.json",
+            "slab_model": "dndecor:block/cut_packed_mud_slab"
+          }
+        }
+      ],
+      "states": {
+        "dndecor:dark_metal_block": {},
+        "dndecor:dark_metal_block_stairs": {
+          "facing": [
+            "east",
+            "north",
+            "south",
+            "west"
+          ],
+          "half": [
+            "bottom",
+            "top"
+          ],
+          "shape": [
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right",
+            "straight"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "dndecor:dark_metal_block_slab": {
+          "type": [
+            "bottom",
+            "double",
+            "top"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "dndecor:white_sheet_metal": {
+          "axis": [
+            "x",
+            "y",
+            "z"
+          ]
+        },
+        "dndecor:red_sheet_metal": {
+          "axis": [
+            "x",
+            "y",
+            "z"
+          ]
+        },
+        "dndecor:blue_sheet_metal": {
+          "axis": [
+            "x",
+            "y",
+            "z"
+          ]
+        },
+        "dndecor:yellow_sheet_metal": {
+          "axis": [
+            "x",
+            "y",
+            "z"
+          ]
+        },
+        "dndecor:brass_sheet_metal": {
+          "axis": [
+            "x",
+            "y",
+            "z"
+          ]
+        },
+        "dndecor:copper_sheet_metal": {
+          "axis": [
+            "x",
+            "y",
+            "z"
+          ]
+        },
+        "dndecor:cut_amethyst": {},
+        "dndecor:cut_amethyst_stairs": {
+          "facing": [
+            "east",
+            "north",
+            "south",
+            "west"
+          ],
+          "half": [
+            "bottom",
+            "top"
+          ],
+          "shape": [
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right",
+            "straight"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "dndecor:cut_amethyst_slab": {
+          "type": [
+            "bottom",
+            "double",
+            "top"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "dndecor:cut_dolomite": {},
+        "dndecor:cut_dolomite_stairs": {
+          "facing": [
+            "east",
+            "north",
+            "south",
+            "west"
+          ],
+          "half": [
+            "bottom",
+            "top"
+          ],
+          "shape": [
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right",
+            "straight"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "dndecor:cut_dolomite_slab": {
+          "type": [
+            "bottom",
+            "double",
+            "top"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "dndecor:cut_gabbro": {},
+        "dndecor:cut_gabbro_stairs": {
+          "facing": [
+            "east",
+            "north",
+            "south",
+            "west"
+          ],
+          "half": [
+            "bottom",
+            "top"
+          ],
+          "shape": [
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right",
+            "straight"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "dndecor:cut_gabbro_slab": {
+          "type": [
+            "bottom",
+            "double",
+            "top"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "dndecor:cut_weathered_limestone": {},
+        "dndecor:cut_weathered_limestone_stairs": {
+          "facing": [
+            "east",
+            "north",
+            "south",
+            "west"
+          ],
+          "half": [
+            "bottom",
+            "top"
+          ],
+          "shape": [
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right",
+            "straight"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "dndecor:cut_weathered_limestone_slab": {
+          "type": [
+            "bottom",
+            "double",
+            "top"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "dndecor:cut_packed_mud": {},
+        "dndecor:cut_packed_mud_stairs": {
+          "facing": [
+            "east",
+            "north",
+            "south",
+            "west"
+          ],
+          "half": [
+            "bottom",
+            "top"
+          ],
+          "shape": [
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right",
+            "straight"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "dndecor:cut_packed_mud_slab": {
+          "type": [
+            "bottom",
+            "double",
+            "top"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        }
+      },
+      "state_evidence_note": "Variant properties from exact jar blockstates. Stair/slab waterlogged Boolean inherited from standard Minecraft StairBlock/SlabBlock, independent of visual variants."
+    },
+    {
+      "slug": "create-deco",
+      "label": "Create Deco",
+      "namespace": "createdeco",
+      "version": "2.1.3",
+      "loader": "neoforge",
+      "license": "MIT",
+      "source": "https://github.com/talrey/CreateDeco",
+      "release_url": "https://modrinth.com/mod/create-deco/version/qrcMVoBD",
+      "sha512": "c536662f9d47ad57a37419165ded14835b23ad6c3e82a920298ecd7ee074244b0b6062ef9cc7ea4501ddd35919a840faccd7fc64e43eb8df31e12076681c3c0d",
+      "license_note": "Modrinth declares MIT; pinned jar neoforge.mods.toml declares All Rights Reserved. No asset redistribution.",
+      "embedded_version": "2.1.3",
+      "embedded_license": "All Rights Reserved",
+      "embedded_dependencies": [
+        {
+          "modId": "neoforge",
+          "type": "required",
+          "versionRange": "[21.1.209,)",
+          "ordering": "NONE",
+          "side": "BOTH"
+        },
+        {
+          "modId": "minecraft",
+          "type": "required",
+          "versionRange": "[1.21.1]",
+          "ordering": "NONE",
+          "side": "BOTH"
+        },
+        {
+          "modId": "create",
+          "type": "required",
+          "versionRange": "[6.0.7,6.1.0)",
+          "ordering": "NONE",
+          "side": "BOTH"
+        }
+      ],
+      "dependencies": [
+        "create"
+      ],
+      "blocks": [
+        {
+          "name": "createdeco:scarlet_bricks",
+          "rgb": [
+            0.577865,
+            0.333747,
+            0.319516
+          ],
+          "material": "Stone",
+          "stairs": "createdeco:scarlet_brick_stairs",
+          "slab": "createdeco:scarlet_brick_slab",
+          "properties": {},
+          "evidence": {
+            "jar": "createdeco-2.1.3.jar",
+            "blockstate": "assets/createdeco/blockstates/scarlet_bricks.json",
+            "model": "createdeco:block/scarlet_bricks",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "createdeco:block/palettes/bricks/scarlet/scarlet_bricks"
+            ],
+            "stairs_blockstate": "assets/createdeco/blockstates/scarlet_brick_stairs.json",
+            "stairs_model": "createdeco:block/scarlet_brick_stairs_inner",
+            "slab_blockstate": "assets/createdeco/blockstates/scarlet_brick_slab.json",
+            "slab_model": "createdeco:block/scarlet_brick_slab"
+          }
+        },
+        {
+          "name": "createdeco:pearl_bricks",
+          "rgb": [
+            0.668336,
+            0.65023,
+            0.633824
+          ],
+          "material": "Stone",
+          "stairs": "createdeco:pearl_brick_stairs",
+          "slab": "createdeco:pearl_brick_slab",
+          "properties": {},
+          "evidence": {
+            "jar": "createdeco-2.1.3.jar",
+            "blockstate": "assets/createdeco/blockstates/pearl_bricks.json",
+            "model": "createdeco:block/pearl_bricks",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "createdeco:block/palettes/bricks/pearl/pearl_bricks"
+            ],
+            "stairs_blockstate": "assets/createdeco/blockstates/pearl_brick_stairs.json",
+            "stairs_model": "createdeco:block/pearl_brick_stairs_inner",
+            "slab_blockstate": "assets/createdeco/blockstates/pearl_brick_slab.json",
+            "slab_model": "createdeco:block/pearl_brick_slab"
+          }
+        },
+        {
+          "name": "createdeco:dean_bricks",
+          "rgb": [
+            0.620634,
+            0.473453,
+            0.354396
+          ],
+          "material": "Stone",
+          "stairs": "createdeco:dean_brick_stairs",
+          "slab": "createdeco:dean_brick_slab",
+          "properties": {},
+          "evidence": {
+            "jar": "createdeco-2.1.3.jar",
+            "blockstate": "assets/createdeco/blockstates/dean_bricks.json",
+            "model": "createdeco:block/dean_bricks",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "createdeco:block/palettes/bricks/dean/dean_bricks"
+            ],
+            "stairs_blockstate": "assets/createdeco/blockstates/dean_brick_stairs.json",
+            "stairs_model": "createdeco:block/dean_brick_stairs_inner",
+            "slab_blockstate": "assets/createdeco/blockstates/dean_brick_slab.json",
+            "slab_model": "createdeco:block/dean_brick_slab"
+          }
+        },
+        {
+          "name": "createdeco:dusk_bricks",
+          "rgb": [
+            0.244623,
+            0.253906,
+            0.262102
+          ],
+          "material": "Stone",
+          "stairs": "createdeco:dusk_brick_stairs",
+          "slab": "createdeco:dusk_brick_slab",
+          "properties": {},
+          "evidence": {
+            "jar": "createdeco-2.1.3.jar",
+            "blockstate": "assets/createdeco/blockstates/dusk_bricks.json",
+            "model": "createdeco:block/dusk_bricks",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "createdeco:block/palettes/bricks/dusk/dusk_bricks"
+            ],
+            "stairs_blockstate": "assets/createdeco/blockstates/dusk_brick_stairs.json",
+            "stairs_model": "createdeco:block/dusk_brick_stairs_inner",
+            "slab_blockstate": "assets/createdeco/blockstates/dusk_brick_slab.json",
+            "slab_model": "createdeco:block/dusk_brick_slab"
+          }
+        },
+        {
+          "name": "createdeco:verdant_bricks",
+          "rgb": [
+            0.378968,
+            0.409651,
+            0.329213
+          ],
+          "material": "Stone",
+          "stairs": "createdeco:verdant_brick_stairs",
+          "slab": "createdeco:verdant_brick_slab",
+          "properties": {},
+          "evidence": {
+            "jar": "createdeco-2.1.3.jar",
+            "blockstate": "assets/createdeco/blockstates/verdant_bricks.json",
+            "model": "createdeco:block/verdant_bricks",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "createdeco:block/palettes/bricks/verdant/verdant_bricks"
+            ],
+            "stairs_blockstate": "assets/createdeco/blockstates/verdant_brick_stairs.json",
+            "stairs_model": "createdeco:block/verdant_brick_stairs_inner",
+            "slab_blockstate": "assets/createdeco/blockstates/verdant_brick_slab.json",
+            "slab_model": "createdeco:block/verdant_brick_slab"
+          }
+        },
+        {
+          "name": "createdeco:umber_bricks",
+          "rgb": [
+            0.535509,
+            0.384145,
+            0.33318
+          ],
+          "material": "Stone",
+          "stairs": "createdeco:umber_brick_stairs",
+          "slab": "createdeco:umber_brick_slab",
+          "properties": {},
+          "evidence": {
+            "jar": "createdeco-2.1.3.jar",
+            "blockstate": "assets/createdeco/blockstates/umber_bricks.json",
+            "model": "createdeco:block/umber_bricks",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "createdeco:block/palettes/bricks/umber/umber_bricks"
+            ],
+            "stairs_blockstate": "assets/createdeco/blockstates/umber_brick_stairs.json",
+            "stairs_model": "createdeco:block/umber_brick_stairs_inner",
+            "slab_blockstate": "assets/createdeco/blockstates/umber_brick_slab.json",
+            "slab_model": "createdeco:block/umber_brick_slab"
+          }
+        },
+        {
+          "name": "createdeco:blue_bricks",
+          "rgb": [
+            0.450245,
+            0.478171,
+            0.526363
+          ],
+          "material": "Stone",
+          "stairs": "createdeco:blue_brick_stairs",
+          "slab": "createdeco:blue_brick_slab",
+          "properties": {},
+          "evidence": {
+            "jar": "createdeco-2.1.3.jar",
+            "blockstate": "assets/createdeco/blockstates/blue_bricks.json",
+            "model": "createdeco:block/blue_bricks",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "createdeco:block/palettes/bricks/blue/blue_bricks"
+            ],
+            "stairs_blockstate": "assets/createdeco/blockstates/blue_brick_stairs.json",
+            "stairs_model": "createdeco:block/blue_brick_stairs_inner",
+            "slab_blockstate": "assets/createdeco/blockstates/blue_brick_slab.json",
+            "slab_model": "createdeco:block/blue_brick_slab"
+          }
+        },
+        {
+          "name": "createdeco:copper_sheet_metal",
+          "rgb": [
+            0.734436,
+            0.4072,
+            0.297636
+          ],
+          "material": "Metal",
+          "stairs": null,
+          "slab": null,
+          "properties": {
+            "axis": "y"
+          },
+          "evidence": {
+            "jar": "createdeco-2.1.3.jar",
+            "blockstate": "assets/createdeco/blockstates/copper_sheet_metal.json",
+            "model": "createdeco:block/copper_sheet_metal",
+            "model_parent": "minecraft:block/cube_column",
+            "texture_samples": [
+              "createdeco:block/palettes/sheet_metal/copper_sheet_metal_top",
+              "createdeco:block/palettes/sheet_metal/copper_sheet_metal"
+            ]
+          }
+        },
+        {
+          "name": "createdeco:brass_sheet_metal",
+          "rgb": [
+            0.8096,
+            0.63558,
+            0.359702
+          ],
+          "material": "Metal",
+          "stairs": null,
+          "slab": null,
+          "properties": {
+            "axis": "y"
+          },
+          "evidence": {
+            "jar": "createdeco-2.1.3.jar",
+            "blockstate": "assets/createdeco/blockstates/brass_sheet_metal.json",
+            "model": "createdeco:block/brass_sheet_metal",
+            "model_parent": "minecraft:block/cube_column",
+            "texture_samples": [
+              "createdeco:block/palettes/sheet_metal/brass_sheet_metal_top",
+              "createdeco:block/palettes/sheet_metal/brass_sheet_metal"
+            ]
+          }
+        },
+        {
+          "name": "createdeco:zinc_sheet_metal",
+          "rgb": [
+            0.548979,
+            0.594756,
+            0.521002
+          ],
+          "material": "Metal",
+          "stairs": null,
+          "slab": null,
+          "properties": {
+            "axis": "y"
+          },
+          "evidence": {
+            "jar": "createdeco-2.1.3.jar",
+            "blockstate": "assets/createdeco/blockstates/zinc_sheet_metal.json",
+            "model": "createdeco:block/zinc_sheet_metal",
+            "model_parent": "minecraft:block/cube_column",
+            "texture_samples": [
+              "createdeco:block/palettes/sheet_metal/zinc_sheet_metal_top",
+              "createdeco:block/palettes/sheet_metal/zinc_sheet_metal"
+            ]
+          }
+        },
+        {
+          "name": "createdeco:industrial_iron_sheet_metal",
+          "rgb": [
+            0.369414,
+            0.359676,
+            0.360616
+          ],
+          "material": "Metal",
+          "stairs": null,
+          "slab": null,
+          "properties": {
+            "axis": "y"
+          },
+          "evidence": {
+            "jar": "createdeco-2.1.3.jar",
+            "blockstate": "assets/createdeco/blockstates/industrial_iron_sheet_metal.json",
+            "model": "createdeco:block/industrial_iron_sheet_metal",
+            "model_parent": "minecraft:block/cube_column",
+            "texture_samples": [
+              "createdeco:block/palettes/sheet_metal/industrial_iron_sheet_metal_top",
+              "createdeco:block/palettes/sheet_metal/industrial_iron_sheet_metal"
+            ]
+          }
+        },
+        {
+          "name": "createdeco:andesite_sheet_metal",
+          "rgb": [
+            0.524214,
+            0.550608,
+            0.531536
+          ],
+          "material": "Metal",
+          "stairs": null,
+          "slab": null,
+          "properties": {
+            "axis": "y"
+          },
+          "evidence": {
+            "jar": "createdeco-2.1.3.jar",
+            "blockstate": "assets/createdeco/blockstates/andesite_sheet_metal.json",
+            "model": "createdeco:block/andesite_sheet_metal",
+            "model_parent": "minecraft:block/cube_column",
+            "texture_samples": [
+              "createdeco:block/palettes/sheet_metal/andesite_sheet_metal_top",
+              "createdeco:block/palettes/sheet_metal/andesite_sheet_metal"
+            ]
+          }
+        }
+      ],
+      "states": {
+        "createdeco:scarlet_bricks": {},
+        "createdeco:scarlet_brick_stairs": {
+          "facing": [
+            "east",
+            "north",
+            "south",
+            "west"
+          ],
+          "half": [
+            "bottom",
+            "top"
+          ],
+          "shape": [
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right",
+            "straight"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "createdeco:scarlet_brick_slab": {
+          "type": [
+            "bottom",
+            "double",
+            "top"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "createdeco:pearl_bricks": {},
+        "createdeco:pearl_brick_stairs": {
+          "facing": [
+            "east",
+            "north",
+            "south",
+            "west"
+          ],
+          "half": [
+            "bottom",
+            "top"
+          ],
+          "shape": [
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right",
+            "straight"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "createdeco:pearl_brick_slab": {
+          "type": [
+            "bottom",
+            "double",
+            "top"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "createdeco:dean_bricks": {},
+        "createdeco:dean_brick_stairs": {
+          "facing": [
+            "east",
+            "north",
+            "south",
+            "west"
+          ],
+          "half": [
+            "bottom",
+            "top"
+          ],
+          "shape": [
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right",
+            "straight"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "createdeco:dean_brick_slab": {
+          "type": [
+            "bottom",
+            "double",
+            "top"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "createdeco:dusk_bricks": {},
+        "createdeco:dusk_brick_stairs": {
+          "facing": [
+            "east",
+            "north",
+            "south",
+            "west"
+          ],
+          "half": [
+            "bottom",
+            "top"
+          ],
+          "shape": [
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right",
+            "straight"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "createdeco:dusk_brick_slab": {
+          "type": [
+            "bottom",
+            "double",
+            "top"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "createdeco:verdant_bricks": {},
+        "createdeco:verdant_brick_stairs": {
+          "facing": [
+            "east",
+            "north",
+            "south",
+            "west"
+          ],
+          "half": [
+            "bottom",
+            "top"
+          ],
+          "shape": [
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right",
+            "straight"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "createdeco:verdant_brick_slab": {
+          "type": [
+            "bottom",
+            "double",
+            "top"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "createdeco:umber_bricks": {},
+        "createdeco:umber_brick_stairs": {
+          "facing": [
+            "east",
+            "north",
+            "south",
+            "west"
+          ],
+          "half": [
+            "bottom",
+            "top"
+          ],
+          "shape": [
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right",
+            "straight"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "createdeco:umber_brick_slab": {
+          "type": [
+            "bottom",
+            "double",
+            "top"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "createdeco:blue_bricks": {},
+        "createdeco:blue_brick_stairs": {
+          "facing": [
+            "east",
+            "north",
+            "south",
+            "west"
+          ],
+          "half": [
+            "bottom",
+            "top"
+          ],
+          "shape": [
+            "inner_left",
+            "inner_right",
+            "outer_left",
+            "outer_right",
+            "straight"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "createdeco:blue_brick_slab": {
+          "type": [
+            "bottom",
+            "double",
+            "top"
+          ],
+          "waterlogged": [
+            "false",
+            "true"
+          ]
+        },
+        "createdeco:copper_sheet_metal": {
+          "axis": [
+            "x",
+            "y",
+            "z"
+          ]
+        },
+        "createdeco:brass_sheet_metal": {
+          "axis": [
+            "x",
+            "y",
+            "z"
+          ]
+        },
+        "createdeco:zinc_sheet_metal": {
+          "axis": [
+            "x",
+            "y",
+            "z"
+          ]
+        },
+        "createdeco:industrial_iron_sheet_metal": {
+          "axis": [
+            "x",
+            "y",
+            "z"
+          ]
+        },
+        "createdeco:andesite_sheet_metal": {
+          "axis": [
+            "x",
+            "y",
+            "z"
+          ]
+        }
+      },
+      "state_evidence_note": "Variant properties from exact jar blockstates. Stair/slab waterlogged Boolean inherited from standard Minecraft StairBlock/SlabBlock, independent of visual variants."
+    },
+    {
+      "slug": "create-chipped",
+      "label": "Create: Chipped",
+      "namespace": "create_chipped",
+      "version": "CurseForge file 7985040 (1.1.0 title / 1.2.0 filename / 1.0.0 embedded)",
+      "loader": "neoforge",
+      "license": "CC-BY-NC-3.0 (CurseForge); embedded metadata: Not specified",
+      "source": null,
+      "release_url": "https://www.curseforge.com/minecraft/mc-mods/create-chipped/files/7985040",
+      "sha512": "899601f69bf3f7c38c115b4105703d942c7fbab78dfaa046f31204e956a508c855cbd4e02c9327001a33acd3ee8b3e02c351690edf8f2fe4b7ddb9cb0c38a726",
+      "embedded_version": "1.0.0",
+      "embedded_license": "Not specified",
+      "embedded_dependencies": [
+        {
+          "modId": "neoforge",
+          "type": "required",
+          "versionRange": "[21.1.190,)",
+          "ordering": "AFTER",
+          "side": "BOTH"
+        },
+        {
+          "modId": "minecraft",
+          "type": "required",
+          "versionRange": "[1.21.1]",
+          "ordering": "AFTER",
+          "side": "BOTH"
+        }
+      ],
+      "dependencies": [
+        "create",
+        "chipped"
+      ],
+      "blocks": [
+        {
+          "name": "create_chipped:asurine_bricks",
+          "rgb": [
+            0.356327,
+            0.473284,
+            0.580591
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "create_chipped-1.2.0-neoforge-1.21.1.jar",
+            "blockstate": "assets/create_chipped/blockstates/asurine_bricks.json",
+            "model": "create_chipped:block/asurine_bricks",
+            "model_parent": "block/cube_all",
+            "texture_samples": [
+              "create_chipped:block/asurine/asurine_bricks"
+            ]
+          }
+        },
+        {
+          "name": "create_chipped:crimsite_bricks",
+          "rgb": [
+            0.514277,
+            0.206219,
+            0.245221
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "create_chipped-1.2.0-neoforge-1.21.1.jar",
+            "blockstate": "assets/create_chipped/blockstates/crimsite_bricks.json",
+            "model": "create_chipped:block/crimsite_bricks",
+            "model_parent": "block/cube_all",
+            "texture_samples": [
+              "create_chipped:block/crimsite/crimsite_bricks"
+            ]
+          }
+        },
+        {
+          "name": "create_chipped:limestone_bricks",
+          "rgb": [
+            0.743566,
+            0.727757,
+            0.674816
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "create_chipped-1.2.0-neoforge-1.21.1.jar",
+            "blockstate": "assets/create_chipped/blockstates/limestone_bricks.json",
+            "model": "create_chipped:block/limestone_bricks",
+            "model_parent": "block/cube_all",
+            "texture_samples": [
+              "create_chipped:block/limestone/limestone_bricks"
+            ]
+          }
+        },
+        {
+          "name": "create_chipped:ochrum_bricks",
+          "rgb": [
+            0.661412,
+            0.522855,
+            0.331556
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "create_chipped-1.2.0-neoforge-1.21.1.jar",
+            "blockstate": "assets/create_chipped/blockstates/ochrum_bricks.json",
+            "model": "create_chipped:block/ochrum_bricks",
+            "model_parent": "block/cube_all",
+            "texture_samples": [
+              "create_chipped:block/ochrum/ochrum_bricks"
+            ]
+          }
+        },
+        {
+          "name": "create_chipped:scorchia_bricks",
+          "rgb": [
+            0.211765,
+            0.240257,
+            0.233578
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "create_chipped-1.2.0-neoforge-1.21.1.jar",
+            "blockstate": "assets/create_chipped/blockstates/scorchia_bricks.json",
+            "model": "create_chipped:block/scorchia_bricks",
+            "model_parent": "block/cube_all",
+            "texture_samples": [
+              "create_chipped:block/scorchia/scorchia_bricks"
+            ]
+          }
+        },
+        {
+          "name": "create_chipped:scoria_bricks",
+          "rgb": [
+            0.315901,
+            0.246706,
+            0.221017
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "create_chipped-1.2.0-neoforge-1.21.1.jar",
+            "blockstate": "assets/create_chipped/blockstates/scoria_bricks.json",
+            "model": "create_chipped:block/scoria_bricks",
+            "model_parent": "block/cube_all",
+            "texture_samples": [
+              "create_chipped:block/scoria/scoria_bricks"
+            ]
+          }
+        },
+        {
+          "name": "create_chipped:veridium_bricks",
+          "rgb": [
+            0.128539,
+            0.403615,
+            0.344225
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "create_chipped-1.2.0-neoforge-1.21.1.jar",
+            "blockstate": "assets/create_chipped/blockstates/veridium_bricks.json",
+            "model": "create_chipped:block/veridium_bricks",
+            "model_parent": "block/cube_all",
+            "texture_samples": [
+              "create_chipped:block/veridium/veridium_bricks"
+            ]
+          }
+        },
+        {
+          "name": "create_chipped:dark_limestone_bricks",
+          "rgb": [
+            0.400521,
+            0.369164,
+            0.265594
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "create_chipped-1.2.0-neoforge-1.21.1.jar",
+            "blockstate": "assets/create_chipped/blockstates/dark_limestone_bricks.json",
+            "model": "create_chipped:block/dark_limestone_bricks",
+            "model_parent": "block/cube_all",
+            "texture_samples": [
+              "create_chipped:block/dark_limestone/dark_limestone_bricks"
+            ]
+          }
+        },
+        {
+          "name": "create_chipped:asurine_polished",
+          "rgb": [
+            0.371615,
+            0.495879,
+            0.601746
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "create_chipped-1.2.0-neoforge-1.21.1.jar",
+            "blockstate": "assets/create_chipped/blockstates/asurine_polished.json",
+            "model": "create_chipped:block/asurine_polished",
+            "model_parent": "block/cube_all",
+            "texture_samples": [
+              "create_chipped:block/asurine/polished_asurine"
+            ]
+          }
+        },
+        {
+          "name": "create_chipped:crimsite_polished",
+          "rgb": [
+            0.536872,
+            0.21152,
+            0.249755
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "create_chipped-1.2.0-neoforge-1.21.1.jar",
+            "blockstate": "assets/create_chipped/blockstates/crimsite_polished.json",
+            "model": "create_chipped:block/crimsite_polished",
+            "model_parent": "block/cube_all",
+            "texture_samples": [
+              "create_chipped:block/crimsite/polished_crimsite"
+            ]
+          }
+        },
+        {
+          "name": "create_chipped:ochrum_polished",
+          "rgb": [
+            0.675322,
+            0.541146,
+            0.339691
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "create_chipped-1.2.0-neoforge-1.21.1.jar",
+            "blockstate": "assets/create_chipped/blockstates/ochrum_polished.json",
+            "model": "create_chipped:block/ochrum_polished",
+            "model_parent": "block/cube_all",
+            "texture_samples": [
+              "create_chipped:block/ochrum/polished_ochrum"
+            ]
+          }
+        },
+        {
+          "name": "create_chipped:veridium_polished",
+          "rgb": [
+            0.139782,
+            0.419363,
+            0.345496
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "create_chipped-1.2.0-neoforge-1.21.1.jar",
+            "blockstate": "assets/create_chipped/blockstates/veridium_polished.json",
+            "model": "create_chipped:block/veridium_polished",
+            "model_parent": "block/cube_all",
+            "texture_samples": [
+              "create_chipped:block/veridium/polished_veridium"
+            ]
+          }
+        }
+      ],
+      "states": {
+        "create_chipped:asurine_bricks": {},
+        "create_chipped:crimsite_bricks": {},
+        "create_chipped:limestone_bricks": {},
+        "create_chipped:ochrum_bricks": {},
+        "create_chipped:scorchia_bricks": {},
+        "create_chipped:scoria_bricks": {},
+        "create_chipped:veridium_bricks": {},
+        "create_chipped:dark_limestone_bricks": {},
+        "create_chipped:asurine_polished": {},
+        "create_chipped:crimsite_polished": {},
+        "create_chipped:ochrum_polished": {},
+        "create_chipped:veridium_polished": {}
+      },
+      "state_evidence_note": "Variant properties from exact jar blockstates. Stair/slab waterlogged Boolean inherited from standard Minecraft StairBlock/SlabBlock, independent of visual variants."
+    },
+    {
+      "slug": "chipped",
+      "label": "Chipped",
+      "namespace": "chipped",
+      "version": "4.0.2",
+      "loader": "neoforge",
+      "license": "LicenseRef-All-Rights-Reserved",
+      "source": "https://github.com/terrarium-earth/Chipped",
+      "release_url": "https://modrinth.com/mod/chipped/version/eqVowbGc",
+      "sha512": "f3083b01267e7c674c4b42f45a317c93ee7723443cba2051fe5bc593638b533b0fe90699e2101661c934dff458eab693cce4e188533bfe977778c249563a2fa5",
+      "embedded_version": "4.0.2",
+      "embedded_license": "Terrarium License",
+      "embedded_dependencies": [
+        {
+          "modId": "neoforge",
+          "type": "required",
+          "versionRange": "[21,)",
+          "ordering": "NONE",
+          "side": "BOTH"
+        },
+        {
+          "modId": "minecraft",
+          "type": "required",
+          "versionRange": "[1.21,)",
+          "ordering": "NONE",
+          "side": "BOTH"
+        },
+        {
+          "modId": "resourcefullib",
+          "type": "required",
+          "versionRange": "[3.0.0,)",
+          "ordering": "NONE",
+          "side": "BOTH"
+        },
+        {
+          "modId": "athena",
+          "type": "required",
+          "versionRange": "[4.0.0,)",
+          "ordering": "NONE",
+          "side": "CLIENT"
+        },
+        {
+          "modId": "jei",
+          "type": "optional",
+          "versionRange": "[19.19.3,)",
+          "ordering": "NONE",
+          "side": "CLIENT"
+        }
+      ],
+      "license_note": "Modrinth declares All Rights Reserved; pinned jar metadata names Terrarium License. No asset redistribution.",
+      "dependencies": [],
+      "blocks": [
+        {
+          "name": "chipped:white_concrete_bricks",
+          "rgb": [
+            0.827773,
+            0.847365,
+            0.851823
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "chipped-neoforge-1.21.1-4.0.2.jar",
+            "blockstate": "assets/chipped/blockstates/white_concrete_bricks.json",
+            "model": "chipped:block/white_concrete_bricks",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "chipped:block/white_concrete/white_concrete_bricks"
+            ]
+          }
+        },
+        {
+          "name": "chipped:light_gray_concrete_bricks",
+          "rgb": [
+            0.494501,
+            0.494501,
+            0.455285
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "chipped-neoforge-1.21.1-4.0.2.jar",
+            "blockstate": "assets/chipped/blockstates/light_gray_concrete_bricks.json",
+            "model": "chipped:block/light_gray_concrete_bricks",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "chipped:block/light_gray_concrete/light_gray_concrete_bricks"
+            ]
+          }
+        },
+        {
+          "name": "chipped:gray_concrete_bricks",
+          "rgb": [
+            0.211504,
+            0.224127,
+            0.239813
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "chipped-neoforge-1.21.1-4.0.2.jar",
+            "blockstate": "assets/chipped/blockstates/gray_concrete_bricks.json",
+            "model": "chipped:block/gray_concrete_bricks",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "chipped:block/gray_concrete/gray_concrete_bricks"
+            ]
+          }
+        },
+        {
+          "name": "chipped:black_concrete_bricks",
+          "rgb": [
+            0.033211,
+            0.041376,
+            0.059911
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "chipped-neoforge-1.21.1-4.0.2.jar",
+            "blockstate": "assets/chipped/blockstates/black_concrete_bricks.json",
+            "model": "chipped:block/black_concrete_bricks",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "chipped:block/black_concrete/black_concrete_bricks"
+            ]
+          }
+        },
+        {
+          "name": "chipped:red_concrete_bricks",
+          "rgb": [
+            0.562806,
+            0.145282,
+            0.135846
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "chipped-neoforge-1.21.1-4.0.2.jar",
+            "blockstate": "assets/chipped/blockstates/red_concrete_bricks.json",
+            "model": "chipped:block/red_concrete_bricks",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "chipped:block/red_concrete/red_concrete_bricks"
+            ]
+          }
+        },
+        {
+          "name": "chipped:orange_concrete_bricks",
+          "rgb": [
+            0.873698,
+            0.379749,
+            0.007322
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "chipped-neoforge-1.21.1-4.0.2.jar",
+            "blockstate": "assets/chipped/blockstates/orange_concrete_bricks.json",
+            "model": "chipped:block/orange_concrete_bricks",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "chipped:block/orange_concrete/orange_concrete_bricks"
+            ]
+          }
+        },
+        {
+          "name": "chipped:yellow_concrete_bricks",
+          "rgb": [
+            0.94784,
+            0.700797,
+            0.092616
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "chipped-neoforge-1.21.1-4.0.2.jar",
+            "blockstate": "assets/chipped/blockstates/yellow_concrete_bricks.json",
+            "model": "chipped:block/yellow_concrete_bricks",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "chipped:block/yellow_concrete/yellow_concrete_bricks"
+            ]
+          }
+        },
+        {
+          "name": "chipped:lime_concrete_bricks",
+          "rgb": [
+            0.382123,
+            0.670113,
+            0.105438
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "chipped-neoforge-1.21.1-4.0.2.jar",
+            "blockstate": "assets/chipped/blockstates/lime_concrete_bricks.json",
+            "model": "chipped:block/lime_concrete_bricks",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "chipped:block/lime_concrete/lime_concrete_bricks"
+            ]
+          }
+        },
+        {
+          "name": "chipped:green_concrete_bricks",
+          "rgb": [
+            0.283226,
+            0.353952,
+            0.143689
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "chipped-neoforge-1.21.1-4.0.2.jar",
+            "blockstate": "assets/chipped/blockstates/green_concrete_bricks.json",
+            "model": "chipped:block/green_concrete_bricks",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "chipped:block/green_concrete/green_concrete_bricks"
+            ]
+          }
+        },
+        {
+          "name": "chipped:cyan_concrete_bricks",
+          "rgb": [
+            0.08413,
+            0.464308,
+            0.532629
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "chipped-neoforge-1.21.1-4.0.2.jar",
+            "blockstate": "assets/chipped/blockstates/cyan_concrete_bricks.json",
+            "model": "chipped:block/cyan_concrete_bricks",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "chipped:block/cyan_concrete/cyan_concrete_bricks"
+            ]
+          }
+        },
+        {
+          "name": "chipped:blue_concrete_bricks",
+          "rgb": [
+            0.179274,
+            0.185401,
+            0.561887
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "chipped-neoforge-1.21.1-4.0.2.jar",
+            "blockstate": "assets/chipped/blockstates/blue_concrete_bricks.json",
+            "model": "chipped:block/blue_concrete_bricks",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "chipped:block/blue_concrete/blue_concrete_bricks"
+            ]
+          }
+        },
+        {
+          "name": "chipped:purple_concrete_bricks",
+          "rgb": [
+            0.410815,
+            0.131419,
+            0.621569
+          ],
+          "material": "Stone",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "chipped-neoforge-1.21.1-4.0.2.jar",
+            "blockstate": "assets/chipped/blockstates/purple_concrete_bricks.json",
+            "model": "chipped:block/purple_concrete_bricks",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "chipped:block/purple_concrete/purple_concrete_bricks"
+            ]
+          }
+        }
+      ],
+      "states": {
+        "chipped:white_concrete_bricks": {},
+        "chipped:light_gray_concrete_bricks": {},
+        "chipped:gray_concrete_bricks": {},
+        "chipped:black_concrete_bricks": {},
+        "chipped:red_concrete_bricks": {},
+        "chipped:orange_concrete_bricks": {},
+        "chipped:yellow_concrete_bricks": {},
+        "chipped:lime_concrete_bricks": {},
+        "chipped:green_concrete_bricks": {},
+        "chipped:cyan_concrete_bricks": {},
+        "chipped:blue_concrete_bricks": {},
+        "chipped:purple_concrete_bricks": {}
+      },
+      "state_evidence_note": "Variant properties from exact jar blockstates. Stair/slab waterlogged Boolean inherited from standard Minecraft StairBlock/SlabBlock, independent of visual variants."
+    },
+    {
+      "slug": "create-encased",
+      "label": "Create Encased",
+      "namespace": "createcasing",
+      "version": "1.21.1-1.9.0-ht3",
+      "loader": "neoforge",
+      "license": "MIT",
+      "source": "https://github.com/iglee42/CreateCasing",
+      "release_url": "https://modrinth.com/mod/create-encased/version/t6MATlU9",
+      "sha512": "ed27f640b2b30546ab2e5d8d56e6291b559ae76b1fe48b1521c0b9f10c238282a73a44e5781c71fc58088e6c8526ad5c01cf5ef54fadf5640d118ae53d8a67d4",
+      "embedded_version": "1.9.0-ht3",
+      "embedded_license": "MIT",
+      "embedded_dependencies": [
+        {
+          "modId": "neoforge",
+          "versionRange": "[21,)",
+          "ordering": "NONE",
+          "side": "BOTH"
+        },
+        {
+          "modId": "minecraft",
+          "versionRange": "[1.21,)",
+          "ordering": "NONE",
+          "side": "BOTH"
+        },
+        {
+          "modId": "create",
+          "versionRange": "[6.0.10,)",
+          "ordering": "AFTER",
+          "side": "BOTH"
+        },
+        {
+          "modId": "kubejs",
+          "type": "optional",
+          "versionRange": "[2101,)",
+          "ordering": "AFTER"
+        },
+        {
+          "modId": "sliceanddice",
+          "type": "optional",
+          "versionRange": "[4.3.0,)"
+        }
+      ],
+      "dependencies": [
+        "create"
+      ],
+      "blocks": [
+        {
+          "name": "createcasing:zinc_casing",
+          "rgb": [
+            0.557736,
+            0.512883,
+            0.377267
+          ],
+          "material": "Metal",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "Create Encased-1.21.1-1.9.0-ht3.jar",
+            "blockstate": "assets/createcasing/blockstates/zinc_casing.json",
+            "model": "createcasing:block/zinc_casing",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "createcasing:block/casing/zinc"
+            ]
+          }
+        }
+      ],
+      "states": {
+        "createcasing:zinc_casing": {}
+      },
+      "state_evidence_note": "Variant properties from exact jar blockstates. Stair/slab waterlogged Boolean inherited from standard Minecraft StairBlock/SlabBlock, independent of visual variants."
+    },
+    {
+      "slug": "bellsandwhistles",
+      "label": "Create: Bells & Whistles",
+      "namespace": "bellsandwhistles",
+      "version": "v0.4.7-1.21.1",
+      "loader": "neoforge",
+      "license": "GPL-3.0-or-later",
+      "source": "https://github.com/sudoLev/BellsAndWhistlesMod",
+      "release_url": "https://modrinth.com/mod/bellsandwhistles/version/w0mifib8",
+      "sha512": "482ee096477b89ed8ec5ce008a4a8ac0ae853079a4f5ce16ad0e0dd9b2eb12b3326f17acaaca1eae0bc51ad238f4e51c8d5b93ded71fe7240717ac8600041c59",
+      "embedded_version": "0.4.7-1.21.1",
+      "embedded_license": "GPL-3.0",
+      "embedded_dependencies": [
+        {
+          "modId": "neoforge",
+          "type": "required",
+          "versionRange": "[21.0.0-beta,)",
+          "ordering": "NONE",
+          "side": "BOTH"
+        },
+        {
+          "modId": "minecraft",
+          "mandatory": true,
+          "versionRange": "[1.21,1.21.2)",
+          "ordering": "NONE",
+          "side": "BOTH"
+        },
+        {
+          "modId": "create",
+          "mandatory": true,
+          "versionRange": "[6.0.2,6.1.0)",
+          "ordering": "NONE",
+          "side": "BOTH"
+        }
+      ],
+      "dependencies": [
+        "create"
+      ],
+      "blocks": [
+        {
+          "name": "bellsandwhistles:metro_casing",
+          "rgb": [
+            0.316682,
+            0.372442,
+            0.235708
+          ],
+          "material": "Metal",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "bellsandwhistles-0.4.7-1.21.1.jar",
+            "blockstate": "assets/bellsandwhistles/blockstates/metro_casing.json",
+            "model": "bellsandwhistles:block/metro/metro_casing",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "bellsandwhistles:block/metro/metro"
+            ]
+          }
+        },
+        {
+          "name": "bellsandwhistles:corrugated_metro_casing",
+          "rgb": [
+            0.310708,
+            0.365354,
+            0.229968
+          ],
+          "material": "Metal",
+          "stairs": null,
+          "slab": null,
+          "properties": {},
+          "evidence": {
+            "jar": "bellsandwhistles-0.4.7-1.21.1.jar",
+            "blockstate": "assets/bellsandwhistles/blockstates/corrugated_metro_casing.json",
+            "model": "bellsandwhistles:block/metro/corrugated_metro_casing",
+            "model_parent": "minecraft:block/cube_all",
+            "texture_samples": [
+              "bellsandwhistles:block/metro/corrugated_metro",
+              "bellsandwhistles:block/metro/metro"
+            ]
+          }
+        }
+      ],
+      "states": {
+        "bellsandwhistles:metro_casing": {},
+        "bellsandwhistles:corrugated_metro_casing": {}
+      },
+      "state_evidence_note": "Variant properties from exact jar blockstates. Stair/slab waterlogged Boolean inherited from standard Minecraft StairBlock/SlabBlock, independent of visual variants."
+    }
+  ]
+}

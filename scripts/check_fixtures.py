@@ -8,6 +8,7 @@ from pathlib import Path
 from fromthecraft.convert import convert, read_file
 from fromthecraft.geometry import quaternion
 from fromthecraft.preview import preview
+from fromthecraft.compatibility import MODS
 
 
 def peak_working_set_mb():
@@ -61,8 +62,10 @@ def main():
     )
     parser.add_argument("folder", type=Path)
     parser.add_argument("--litematic", action="store_true", help="Also test every fixture as Litematic")
+    parser.add_argument("--mods", nargs="*", choices=sorted(MODS), default=[])
+    parser.add_argument("--output", type=Path, default=Path("artifacts/fixture-checks"))
     args = parser.parse_args()
-    output = Path("artifacts/fixture-checks")
+    output = args.output
     output.mkdir(parents=True, exist_ok=True)
     reports = []
     for path in sorted(args.folder.glob("*.blueprint")):
@@ -85,7 +88,7 @@ def main():
             )
             for format in ["nbt", "litematic"] if args.litematic else ["nbt"]:
                 started = time.perf_counter()
-                result = convert(scene, format)
+                result = convert(scene, format, mods=args.mods)
                 display = preview(result.scene, result.offset)
                 (output / (path.stem + "." + format)).write_bytes(result.content)
                 report[format] = {
@@ -94,6 +97,9 @@ def main():
                     "primitives": len(result.scene.parts),
                     "dimensions": display["dimensions"],
                     "unknown_ids": sum(v for k, v in result.notices.items() if "Unrecognized" in k),
+                    "copycat_cells": sum(
+                        part.state.copied_material is not None for part in result.scene.parts
+                    ),
                     "notices": dict(result.notices),
                 }
                 del result, display
@@ -108,6 +114,8 @@ def main():
         (output / "report.json").write_text(
             json.dumps(reports, indent=2, ensure_ascii=False), encoding="utf-8"
         )
+    if any(report["state"] == "failed" for report in reports):
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

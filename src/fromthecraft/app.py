@@ -12,7 +12,7 @@ from urllib.parse import quote
 from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -20,6 +20,7 @@ from .convert import convert, read_file
 from .ftd import CATALOG_INFO
 from .model import Cancelled, Result, Scene
 from .preview import preview
+from .compatibility import mod_choices, selected_mods
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
@@ -108,6 +109,7 @@ def open_session(request: Request, response: Response):
         "can_close": shutdown_callback is not None,
         "ftd_catalog": CATALOG_INFO["version"],
         "ftd_catalog_entries": CATALOG_INFO["entries"],
+        "mod_choices": mod_choices(),
     }
 
 
@@ -162,6 +164,13 @@ class Options(BaseModel):
     preference: Literal["balanced", "material", "color"] = "balanced"
     hollow: bool = False
     shell_thickness: Literal[1, 2, 3, 4] = 1
+    mods: list[str] = Field(default_factory=list, max_length=8)
+
+    @field_validator("mods")
+    @classmethod
+    def known_mods(cls, value):
+        selected_mods(value)
+        return value
 
 
 @app.post("/api/convert")
@@ -181,8 +190,15 @@ def start_conversion(request: Request, options: Options):
     def work():
         try:
             result = convert(
-                scene, options.format, options.scale, options.preference, progress, cancelled.is_set,
-                options.hollow, options.shell_thickness
+                scene,
+                options.format,
+                options.scale,
+                options.preference,
+                progress,
+                cancelled.is_set,
+                options.hollow,
+                options.shell_thickness,
+                options.mods,
             )
             display = preview(result.scene, result.offset)
             with session.lock:
