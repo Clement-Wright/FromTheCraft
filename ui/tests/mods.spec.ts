@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import type { Display, Status } from "../src/types";
 
 const demo = path.resolve("../examples/demo-hull.blueprint");
 const convert = (page: Page) =>
@@ -36,6 +37,77 @@ test("vanilla is the default conversion palette", async ({ page }) => {
       item.name.startsWith("minecraft:"),
     ),
   ).toBe(true);
+});
+
+test("real painted hull exports keep their materials with vanilla and Copycats", async ({
+  page,
+}) => {
+  test.skip(
+    !process.env.FROMTHECRAFT_PAINTED_SHIP,
+    "Set FROMTHECRAFT_PAINTED_SHIP to the owner's red hull fixture.",
+  );
+  test.setTimeout(120000);
+  await page.setViewportSize({ width: 1800, height: 1000 });
+  await open(page, process.env.FROMTHECRAFT_PAINTED_SHIP!);
+  await page.getByLabel("Material preference").selectOption("color");
+  await convert(page);
+  await expect(page.getByRole("status")).toHaveText(/ready to export/, {
+    timeout: 60000,
+  });
+  const vanilla: Status = await page.request
+    .get("/api/status")
+    .then((response) => response.json());
+  const rows = vanilla.converted!.materials;
+  expect(
+    rows.every((row) =>
+      /^minecraft:.*_(concrete|stained_glass)$/.test(row.name),
+    ),
+  ).toBe(true);
+  expect(rows.some((row) => row.name === "minecraft:red_concrete")).toBe(true);
+  await page.screenshot({
+    path: "../artifacts/painted-hull-vanilla.png",
+    fullPage: true,
+  });
+  await page.locator(".mod-picker summary").click();
+  await mod(page, "Create: Copycats+").check();
+  await expect(
+    page.getByRole("button", { name: "Export file" }),
+  ).toBeDisabled();
+  await convert(page);
+  await expect(page.getByRole("status")).toHaveText(/ready to export/, {
+    timeout: 60000,
+  });
+  const copied: Status = await page.request
+    .get("/api/status")
+    .then((response) => response.json());
+  const shapes = copied.converted!.materials.filter(
+    (row) => row.copied_material,
+  );
+  expect(shapes.length).toBeGreaterThan(0);
+  expect(
+    shapes.some(
+      (row) => row.copied_material!.name === "minecraft:red_concrete",
+    ),
+  ).toBe(true);
+  const expectedCount = (display: Display) =>
+    display.materials.reduce((sum, row) => sum + row.count, 0);
+  expect(expectedCount(copied.converted!)).toBe(copied.converted!.count);
+  expect(copied.converted!.count).toBe(vanilla.converted!.count);
+  const download = await page.request.get(
+    "/api/export?result_id=" + encodeURIComponent(copied.result_id!),
+  );
+  const content = await download.body();
+  expect(createHash("sha256").update(content).digest("hex")).toBe(
+    copied.sha256,
+  );
+  await page.getByLabel("Search materials").fill("red_concrete");
+  await expect(page.getByTestId("material-list")).toContainText(
+    "Applied material: minecraft:red_concrete",
+  );
+  await page.screenshot({
+    path: "../artifacts/painted-hull-copycats.png",
+    fullPage: true,
+  });
 });
 
 test("installed mods add dependencies and remove dependent selections", async ({
