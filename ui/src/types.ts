@@ -1,9 +1,19 @@
+export type BlockIdentity = {
+  name: string;
+  material: string;
+  properties: Record<string, string>;
+};
+
 export type Display = {
+  blocks: BlockIdentity[];
+  materials: (BlockIdentity & { count: number })[];
   groups: {
     shape: string;
     transparent: boolean;
     matrices: number[];
     colors: number[];
+    block_indices: number[];
+    vertices?: number[];
   }[];
   count: number;
   bounds: [number[], number[]];

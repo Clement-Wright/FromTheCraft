@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import * as T from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { ConvexGeometry } from "three/addons/geometries/ConvexGeometry.js";
 import type { Display } from "../types";
+import { BlockPicker, type HoveredBlock } from "./BlockPicker";
 
 function boxes(pieces: [number[], number[]][]) {
   const positions: number[] = [];
@@ -91,6 +93,40 @@ function shapeGeometry(shape: string) {
   ]);
 }
 
+function fitDistance(
+  bounds: T.Box3,
+  direction: T.Vector3,
+  aspect: number,
+  fov: number,
+) {
+  const center = bounds.getCenter(new T.Vector3());
+  const away = direction.clone().normalize();
+  const right = new T.Vector3()
+    .crossVectors(new T.Vector3(0, 1, 0), away)
+    .normalize();
+  const up = new T.Vector3().crossVectors(away, right);
+  const vertical = Math.tan(T.MathUtils.degToRad(fov / 2));
+  const horizontal = vertical * aspect;
+  let distance = 0.1;
+  for (const x of [bounds.min.x, bounds.max.x]) {
+    for (const y of [bounds.min.y, bounds.max.y]) {
+      for (const z of [bounds.min.z, bounds.max.z]) {
+        const corner = new T.Vector3(x, y, z).sub(center);
+        distance = Math.max(
+          distance,
+          corner.dot(away) +
+            1.12 *
+              Math.max(
+                Math.abs(corner.dot(right)) / horizontal,
+                Math.abs(corner.dot(up)) / vertical,
+              ),
+        );
+      }
+    }
+  }
+  return distance;
+}
+
 type View = {
   camera: T.PerspectiveCamera;
   controls: OrbitControls;
@@ -116,9 +152,12 @@ export default function PairedViewer({
   const views = useRef<View[]>([]);
   const linkedRef = useRef(linked);
   const [error, setError] = useState("");
+  const [hovered, setHovered] = useState<(HoveredBlock | undefined)[]>([]);
   linkedRef.current = linked;
 
   useEffect(() => {
+    setHovered([]);
+    setError("");
     const cleanup: (() => void)[] = [];
     let syncing = false;
     const models = [source, converted];
@@ -135,20 +174,48 @@ export default function PairedViewer({
             : "Converted 3D structural preview",
         );
         renderer.domElement.setAttribute("tabindex", "0");
+        renderer.domElement.setAttribute(
+          "aria-description",
+          "Drag to orbit. Arrow keys pan. Hover a block to inspect it, or press I to inspect the center. Escape clears inspection.",
+        );
         element.appendChild(renderer.domElement);
         const scene = new T.Scene();
         scene.add(new T.HemisphereLight(0xffffff, 0x8a9389, 2.6));
         const sun = new T.DirectionalLight(0xffffff, 2.2);
         sun.position.set(10, 20, 15);
         scene.add(sun);
-        const camera = new T.PerspectiveCamera(45, 1, 0.01, 100000);
+        const commonAspect = () =>
+          Math.min(
+            ...hosts.map(
+              (host) =>
+                Math.max(1, host.current!.clientWidth) /
+                Math.max(1, host.current!.clientHeight),
+            ),
+          );
+        let frameAspect = commonAspect();
+        const camera = new T.PerspectiveCamera(45, frameAspect, 0.01, 100000);
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = false;
         controls.screenSpacePanning = true;
         controls.listenToKeyEvents(renderer.domElement);
         const resources: { dispose: () => void }[] = [];
+        const picker = new BlockPicker(models[index]);
         for (const group of models[index]?.groups ?? []) {
-          const geometry = shapeGeometry(group.shape);
+          const geometry = group.vertices
+            ? new ConvexGeometry(
+                Array.from(
+                  { length: group.vertices.length / 3 },
+                  (_, i) =>
+                    new T.Vector3(
+                      ...(group.vertices!.slice(i * 3, i * 3 + 3) as [
+                        number,
+                        number,
+                        number,
+                      ]),
+                    ),
+                ),
+              )
+            : shapeGeometry(group.shape);
           const material = new T.MeshStandardMaterial({
             roughness: 0.84,
             metalness: 0.02,
@@ -178,8 +245,20 @@ export default function PairedViewer({
           mesh.instanceMatrix.needsUpdate = true;
           mesh.computeBoundingSphere();
           scene.add(mesh);
+          picker.add(mesh, group.block_indices ?? []);
           resources.push(mesh, geometry, material);
         }
+        const outline = new T.Box3Helper(new T.Box3(), 0x285f40);
+        outline.visible = false;
+        const outlineMaterials = Array.isArray(outline.material)
+          ? outline.material
+          : [outline.material];
+        outlineMaterials.forEach((material) => {
+          material.depthTest = false;
+        });
+        outline.renderOrder = 1;
+        scene.add(outline);
+        resources.push(outline.geometry, ...outlineMaterials);
         const bounds = new T.Box3();
         for (const model of models)
           if (model?.count) {
@@ -223,14 +302,86 @@ export default function PairedViewer({
                 : new T.Vector3(1, 0.7, 1);
         camera.position
           .copy(center)
-          .add(direction.normalize().multiplyScalar(span * 1.45));
+          .add(
+            direction
+              .normalize()
+              .multiplyScalar(
+                fitDistance(bounds, direction, frameAspect, camera.fov),
+              ),
+          );
         camera.up.set(0, 1, 0);
         controls.target.copy(center);
         controls.update();
         const render = () => renderer.render(scene, camera);
         const current: View = { camera, controls, render, renderer };
         views.current[index] = current;
+        let pendingPick = 0;
+        let selectedKey = "";
+        let pointerX = 0;
+        let pointerY = 0;
+        const clearHover = () => {
+          window.cancelAnimationFrame(pendingPick);
+          pendingPick = 0;
+          if (!selectedKey) return;
+          selectedKey = "";
+          outline.visible = false;
+          setHovered((previous) => {
+            const next = [...previous];
+            next[index] = undefined;
+            return next;
+          });
+          render();
+        };
+        const inspect = () => {
+          pendingPick = 0;
+          const rectangle = renderer.domElement.getBoundingClientRect();
+          const hit = picker.pick(
+            new T.Vector2(
+              ((pointerX - rectangle.left) / rectangle.width) * 2 - 1,
+              -((pointerY - rectangle.top) / rectangle.height) * 2 + 1,
+            ),
+            camera,
+          );
+          if (!hit) {
+            clearHover();
+            return;
+          }
+          const key = JSON.stringify(hit.block);
+          if (key === selectedKey) return;
+          selectedKey = key;
+          outline.box.copy(hit.bounds);
+          outline.visible = true;
+          setHovered((previous) => {
+            const next = [...previous];
+            next[index] = hit.block;
+            return next;
+          });
+          render();
+        };
+        const move = (event: PointerEvent) => {
+          if (event.buttons) {
+            clearHover();
+            return;
+          }
+          pointerX = event.clientX;
+          pointerY = event.clientY;
+          if (!pendingPick) pendingPick = window.requestAnimationFrame(inspect);
+        };
+        const inspectKey = (event: KeyboardEvent) => {
+          if (event.key === "Escape") clearHover();
+          if (event.key.toLowerCase() !== "i") return;
+          const rectangle = renderer.domElement.getBoundingClientRect();
+          pointerX = rectangle.left + rectangle.width / 2;
+          pointerY = rectangle.top + rectangle.height / 2;
+          inspect();
+        };
+        renderer.domElement.addEventListener("pointermove", move);
+        renderer.domElement.addEventListener("pointerleave", clearHover);
+        renderer.domElement.addEventListener("pointerdown", clearHover);
+        renderer.domElement.addEventListener("keydown", inspectKey);
+        renderer.domElement.addEventListener("blur", clearHover);
         const change = () => {
+          clearHover();
           if (syncing) return;
           render();
           if (linkedRef.current) {
@@ -251,12 +402,29 @@ export default function PairedViewer({
           const width = Math.max(1, element.clientWidth),
             height = Math.max(1, element.clientHeight);
           renderer.setSize(width, height);
+          const nextFrameAspect = commonAspect();
+          if (Math.abs(nextFrameAspect - frameAspect) > 1e-6) {
+            const offset = camera.position.clone().sub(controls.target);
+            const ratio =
+              fitDistance(bounds, offset, nextFrameAspect, camera.fov) /
+              fitDistance(bounds, offset, frameAspect, camera.fov);
+            camera.position
+              .copy(controls.target)
+              .add(offset.multiplyScalar(ratio));
+            frameAspect = nextFrameAspect;
+          }
           camera.aspect = width / height;
           camera.updateProjectionMatrix();
           render();
         });
         resize.observe(element);
         cleanup.push(() => {
+          window.cancelAnimationFrame(pendingPick);
+          renderer.domElement.removeEventListener("pointermove", move);
+          renderer.domElement.removeEventListener("pointerleave", clearHover);
+          renderer.domElement.removeEventListener("pointerdown", clearHover);
+          renderer.domElement.removeEventListener("keydown", inspectKey);
+          renderer.domElement.removeEventListener("blur", clearHover);
           resize.disconnect();
           controls.dispose();
           for (const resource of resources) resource.dispose();
@@ -307,6 +475,27 @@ export default function PairedViewer({
             </span>
           </header>
           <div className="canvas-host" ref={hosts[index]} />
+          {hovered[index] && (
+            <div
+              className="block-inspector"
+              aria-live="polite"
+              aria-atomic="true"
+              data-testid={`${index === 0 ? "source" : "converted"}-block-inspector`}
+            >
+              <strong>{hovered[index].name}</strong>
+              <span>{hovered[index].material}</span>
+              {Object.keys(hovered[index].properties).length > 0 && (
+                <span>
+                  {Object.entries(hovered[index].properties)
+                    .map(([key, value]) => `${key}=${value}`)
+                    .join(" / ")}
+                </span>
+              )}
+              <span className="block-coordinate">
+                Comparison origin XYZ: {hovered[index].coordinate.join(", ")}
+              </span>
+            </div>
+          )}
           {!model && (
             <div className="viewport-empty">
               <strong>
