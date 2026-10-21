@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "fromthecraft"
 version = "0.1.0"
 description = "Local structural conversion between From the Depths and Minecraft"
+license = "GPL-3.0-or-later"
 requires-python = ">=3.12"
 dependencies = ["numpy==2.2.6", "nbtlib==2.0.4", "litemapy==0.11.0b0", "fastapi==0.115.12", "uvicorn==0.34.2", "python-multipart==0.0.20"]
 

@@ -2,19 +2,45 @@ import argparse
 from pathlib import Path
 
 from .convert import convert
-from .ftd import read_blueprint
+from .convert import read_file
 
 
 def main():
     parser = argparse.ArgumentParser(description="FromTheCraft structural converter")
-    parser.add_argument("source", type=Path)
-    parser.add_argument("destination", type=Path)
+    parser.add_argument(
+        "--no-browser", action="store_true", help="Start the local service without opening a browser"
+    )
+    parser.add_argument("--port", type=int, default=0, help="Local UI port; 0 selects a free port")
+    parser.add_argument(
+        "--idle-timeout",
+        type=int,
+        default=180,
+        help="Stop after this many seconds without a browser heartbeat",
+    )
+    commands = parser.add_subparsers(dest="command")
+    conversion = commands.add_parser("convert", help="Convert a structure without opening the interface")
+    conversion.add_argument("source", type=Path)
+    conversion.add_argument("destination", type=Path)
+    conversion.add_argument("--scale", type=float, choices=[4, 2, 1, 0.5, 0.25], default=1)
+    conversion.add_argument("--palette", choices=["balanced", "material", "color"], default="balanced")
     args = parser.parse_args()
+    if args.command is None:
+        from .launch import launch
+
+        launch(args.port, not args.no_browser, args.idle_timeout)
+        return
     if args.source.resolve() == args.destination.resolve():
         parser.error("Source and destination must differ")
-    result = convert(read_blueprint(args.source.read_bytes()), args.destination.suffix.lstrip("."))
-    with args.destination.open("xb") as target:
-        target.write(result.content)
+    try:
+        scene = read_file(args.source.read_bytes(), args.source.suffix)
+        result = convert(scene, args.destination.suffix.lstrip("."), args.scale, args.palette)
+        with args.destination.open("xb") as target:
+            target.write(result.content)
+    except (OSError, ValueError) as exc:
+        parser.exit(1, f"{exc}\n")
+    print(f"Wrote {args.destination} ({len(result.content):,} bytes)")
+    for message, count in result.notices.items():
+        print(f"{count:,}: {message}")
 
 
 if __name__ == "__main__":
