@@ -10,8 +10,8 @@ from .palettes import mc_target
 
 
 def convert(scene, output, scale=1, preference="balanced", progress=None, cancelled=None):
-    if scale not in (1, 2):
-        raise ValueError("Scale must be 1 or 2")
+    if scale not in (0.25, 0.5, 1, 2, 4):
+        raise ValueError("Scale must be 0.25, 0.5, 1, 2, or 4")
     if preference not in {"balanced", "material", "color"}:
         raise ValueError("Unknown material preference")
     if output not in ({"nbt", "litematic"} if scene.format == "blueprint" else {"blueprint"}):
@@ -20,6 +20,8 @@ def convert(scene, output, scale=1, preference="balanced", progress=None, cancel
     if not cells:
         raise ValueError("No structural blocks remain after skipped blocks")
     notices = Counter(scene.notices)
+    if scale < 1:
+        notices["Reduced scale merges occupied cells; small openings and thin details may be lost"] += 1
     if output == "blueprint":
         for part in cells.values():
             if part.shape.startswith("slab_"):

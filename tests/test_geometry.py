@@ -21,6 +21,19 @@ def test_scale_two_expands_full_volume():
     assert len(result.scene.parts) == 56
 
 
+@pytest.mark.parametrize(
+    "scale,length,count", [(4, 16, 256), (2, 8, 32), (1, 4, 4), (0.5, 2, 2), (0.25, 1, 1)]
+)
+def test_requested_scale_choices_expand_or_reduce_beam(scale, length, count):
+    part = Part("beam", "box", (1, 1, 4), np.eye(4), "Metal", (0.5, 0.5, 0.5))
+    result = convert(Scene([part], "blueprint"), "nbt", scale=scale)
+    assert len(result.scene.parts) == count
+    low, high = bounds(result.scene)
+    assert high[2] - low[2] == length
+    if scale < 1:
+        assert any("Reduced" in message for message in result.notices)
+
+
 @pytest.mark.parametrize("rot,axis,sign", [(0, 2, 1), (1, 0, 1), (2, 2, -1), (4, 1, -1), (10, 1, 1)])
 def test_beam_rotations_keep_all_four_cells(rot, axis, sign):
     bp = json.loads(Path("tests/fixtures/asymmetric.blueprint").read_text())
