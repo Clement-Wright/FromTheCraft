@@ -67,10 +67,14 @@ def read_blueprint(content: bytes) -> Scene:
         root, items = document["Blueprint"], document["ItemDictionary"]
     except (KeyError, TypeError, UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
         raise ValueError("Invalid FtD blueprint JSON or missing Blueprint/ItemDictionary") from exc
+    if not isinstance(root, dict) or not isinstance(items, dict):
+        raise ValueError("Blueprint and ItemDictionary must be JSON objects")
     parts, notices = [], Counter()
+    records = 0
     colors = [vector(c, 4) for c in root.get("COL", [])]
 
     def visit(construct, parent, depth):
+        nonlocal records
         if depth > 32:
             raise ValueError("Blueprint construct nesting exceeds 32")
         transform = parent.copy()
@@ -80,9 +84,10 @@ def read_blueprint(content: bytes) -> Scene:
             local[:3, 3] = vector(construct.get("LocalPosition", "0,0,0"))
             transform = parent @ local
         count = len(construct["BLP"])
+        records += count
         if any(len(construct.get(k, [])) != count for k in ("BLR", "BlockIds", "BCI")):
             raise ValueError("Blueprint block-array length mismatch")
-        if len(parts) + count > MAX_PARTS:
+        if records > MAX_PARTS:
             raise ValueError(f"Blueprint exceeds {MAX_PARTS:,} blocks")
         for position, rot, block_id, paint in zip(
             construct["BLP"], construct["BLR"], construct["BlockIds"], construct["BCI"]
@@ -125,6 +130,10 @@ def read_blueprint(content: bytes) -> Scene:
             notices["Intentionally skipped decoration overlays"] += len(
                 construct.get("Decorations", construct.get("DEC", []))
             )
+        if construct.get("BlockData") or construct.get("VehicleData") or construct.get("BlockStringData"):
+            notices[
+                "Intentionally skipped block/vehicle payloads, including mechanisms and possible decoration overlays"
+            ] += 1
         for child in construct.get("SCs", []):
             visit(child, transform, depth + 1)
 
@@ -174,7 +183,7 @@ def write_blueprint(cells, name="FromTheCraft"):
         "LocalRotation": "0,0,0,1",
         "ItemNumber": 499,
         "SCs": [],
-        "COL": [",".join(str(n) for n in c) for c in paints],
+        "COL": [",".join(str(n) for n in c) for c in paints + [(0.0, 0.0, 0.0, 0.0)] * (32 - len(paints))],
         "BLP": positions,
         "BLR": rotations,
         "BCI": paint_indices,
