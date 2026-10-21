@@ -34,6 +34,31 @@ def test_requested_scale_choices_expand_or_reduce_beam(scale, length, count):
         assert any("Reduced" in message for message in result.notices)
 
 
+@pytest.mark.parametrize("orientation", range(24))
+def test_long_native_slope_thin_tip_is_a_partial_cell_in_every_rotation(orientation):
+    transform = np.eye(4)
+    transform[:3, :3] = rotation(orientation)
+    slope = Part("long red slope", "ftd_slope", (1, 1, 4), transform, "Metal", (0.65, 0.05, 0.05))
+    cells, offset = voxelize(Scene([slope], "blueprint"))
+    tip = [
+        part
+        for position, part in cells.items()
+        if ((np.asarray(position) + offset + 0.5) @ transform[:3, :3])[2] > 3
+    ]
+    assert len(tip) == 1
+    assert tip[0].shape.startswith("slab_")
+
+
+def test_rotated_thin_copycat_slab_uses_its_real_axis_and_vanilla_uses_full_material():
+    from fromthecraft.palettes import mc_target
+
+    part = Part("thin side", "slab_x_top", (1, 1, 1), np.eye(4), "Metal", (0.65, 0.05, 0.05))
+    assert mc_target(part, "color").name == "minecraft:red_concrete"
+    copied = mc_target(part, "color", ("copycats",))
+    assert copied.name == "copycats:copycat_slab"
+    assert dict(copied.properties) == {"axis": "x", "type": "top", "waterlogged": "false"}
+
+
 @pytest.mark.parametrize("shape", ["wedge", "corner", "curve"])
 @pytest.mark.parametrize("z", [-3, 0, 1, 3])
 def test_quarter_scale_translated_small_primitives_do_not_vanish(shape, z):

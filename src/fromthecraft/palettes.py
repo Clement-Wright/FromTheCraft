@@ -149,13 +149,13 @@ def mc_target(part, preference, mods=()):
     if mods:
         base = mod_target(base, part.material, tuple(part.color), part.transparent, preference, mods)
     partial = part.shape.startswith(("slab_", "step_"))
+    slab_axis = part.shape.split("_")[1] if part.shape.startswith(("slab_x_", "slab_z_")) else "y"
+    slab_half = part.shape.rsplit("_", 1)[-1]
     if partial and "copycats" in mods:
         if part.shape.startswith("slab_"):
             return State(
                 "copycats:copycat_slab",
-                tuple(
-                    sorted({"axis": "y", "type": part.shape.split("_")[1], "waterlogged": "false"}.items())
-                ),
+                tuple(sorted({"axis": slab_axis, "type": slab_half, "waterlogged": "false"}.items())),
                 copied_material=base,
             )
         _, facing, half = part.shape.split("_")
@@ -169,6 +169,8 @@ def mc_target(part, preference, mods=()):
     if part.transparent:
         return base
     if partial:
+        if part.shape.startswith("slab_") and slab_axis != "y":
+            return base
         stem = base.name.removesuffix("_planks")
         suffix = "_slab" if part.shape.startswith("slab_") else "_stairs"
         entry = MOD_BLOCKS.get(base.name)
@@ -176,7 +178,7 @@ def mc_target(part, preference, mods=()):
         if not name or name not in BLOCKS and name not in MOD_STATES:
             return base
         if part.shape.startswith("slab_"):
-            return State(name, (("type", part.shape.split("_")[1]), ("waterlogged", "false")))
+            return State(name, (("type", slab_half), ("waterlogged", "false")))
         _, facing, half = part.shape.split("_")
         return State(
             name,

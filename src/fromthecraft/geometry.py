@@ -109,11 +109,14 @@ SAMPLES = np.array(list(product((0.25, 0.75), repeat=3)))
 def cell_shape(mask):
     if mask.all():
         return "box"
+    for axis in (1, 0, 2):
+        bottom = SAMPLES[:, axis] < 0.5
+        prefix = "slab_" if axis == 1 else f"slab_{'xyz'[axis]}_"
+        if np.array_equal(mask, bottom):
+            return prefix + "bottom"
+        if np.array_equal(mask, ~bottom):
+            return prefix + "top"
     bottom = SAMPLES[:, 1] < 0.5
-    if np.array_equal(mask, bottom):
-        return "slab_bottom"
-    if np.array_equal(mask, ~bottom):
-        return "slab_top"
     for facing, axis, positive in (
         ("south", 2, True),
         ("north", 2, False),
@@ -175,11 +178,18 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None):
             ]
             seeds = np.array(list(product(*axes)))
             seeds = seeds[contains(part.shape, seeds)] * part.size
-            positions = np.floor(
-                (seeds @ part.transform[:3, :3].T + part.transform[:3, 3]) * scale + 1e-7
-            ).astype(int)
-            for position in positions:
-                cells.setdefault(tuple(position - origin), replace(part, shape="box"))
+            world_seeds = (seeds @ part.transform[:3, :3].T + part.transform[:3, 3]) * scale
+            positions = np.floor(world_seeds + 1e-7).astype(int)
+            seed_masks = {}
+            octants = ((world_seeds - positions >= 0.5).astype(int) @ [4, 2, 1]).tolist()
+            for position, octant in zip(positions, octants):
+                key = tuple(position - origin)
+                if key not in cells:
+                    seed_masks[key] = seed_masks.get(key, 0) | (1 << octant)
+            for position, mask in seed_masks.items():
+                occupied = np.asarray([bool(mask & (1 << bit)) for bit in range(8)])
+                shape = cell_shape(occupied) if aligned else "box"
+                cells[position] = replace(part, shape=shape)
         if len(cells) > MAX_PARTS:
             raise ValueError(
                 f"Output exceeds {MAX_PARTS:,} occupied cells; choose a smaller scale or structure"
