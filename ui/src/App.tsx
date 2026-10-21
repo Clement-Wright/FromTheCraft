@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import PairedViewer from "./viewer/PairedViewer";
 import Materials from "./Materials";
-import type { Display, Status } from "./types";
+import ModPicker from "./ModPicker";
+import type { Display, ModChoice, Status } from "./types";
 
 const labels: Record<string, string> = {
   empty: "Open a file to begin.",
@@ -26,6 +27,8 @@ export default function App() {
   const [format, setFormat] = useState("nbt");
   const [scale, setScale] = useState(1);
   const [preference, setPreference] = useState("balanced");
+  const [modChoices, setModChoices] = useState<ModChoice[]>([]);
+  const [mods, setMods] = useState<string[]>([]);
   const [hollow, setHollow] = useState(false);
   const [shellThickness, setShellThickness] = useState(1);
   const [sourceNotices, setSourceNotices] = useState<Record<string, number>>(
@@ -51,6 +54,7 @@ export default function App() {
         const session = await response.json();
         token.current = session.token;
         setCanClose(session.can_close);
+        setModChoices(session.mod_choices ?? []);
         setCatalog(
           `FtD catalog: ${session.ftd_catalog ?? "bundled reference"}`,
         );
@@ -151,6 +155,7 @@ export default function App() {
             format,
             scale,
             preference,
+            mods: format === "blueprint" ? [] : mods,
             hollow,
             shell_thickness: shellThickness,
           }),
@@ -361,6 +366,15 @@ export default function App() {
             {format === "blueprint" && (
               <p className="hint">FtD output uses source material and paint.</p>
             )}
+            <ModPicker
+              choices={modChoices}
+              selected={mods}
+              disabled={!initialized || format === "blueprint"}
+              onChange={(selected) => {
+                setMods(selected);
+                invalidate();
+              }}
+            />
             <label className="check hollow-option">
               <input
                 type="checkbox"
@@ -488,6 +502,7 @@ export default function App() {
           <div className="preview-context">
             <span>
               Structural previews use simplified shapes and flat colors.
+              Minecraft uses your installed textures.
             </span>
             <span>
               Orbit: drag / Pan: right-drag / Zoom: scroll / Inspect: hover or I

@@ -2,6 +2,14 @@ export type BlockIdentity = {
   name: string;
   material: string;
   properties: Record<string, string>;
+  copied_material?: { name: string; properties: Record<string, string> };
+};
+
+export type ModChoice = {
+  slug: string;
+  label: string;
+  version: string;
+  dependencies: string[];
 };
 
 export type Display = {

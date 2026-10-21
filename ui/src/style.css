@@ -168,6 +168,83 @@ h2 {
   width: 100%;
   padding-left: 9px;
 }
+.mod-picker {
+  border: 1px solid #bec8bf;
+  border-radius: 3px;
+  background: #fff;
+}
+.mod-picker summary {
+  min-height: 40px;
+  padding: 10px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+.mod-picker summary::marker {
+  color: #617261;
+}
+.mod-picker summary small {
+  margin-left: 6px;
+  color: #627063;
+  font-size: 10px;
+  font-weight: 400;
+}
+.mod-picker[open] summary {
+  border-bottom: 1px solid #e0e5dc;
+}
+.mod-picker .mod-hint {
+  padding: 9px 10px 0;
+  color: #627063;
+  font-size: 11px;
+}
+.mod-picker fieldset {
+  border: 0;
+  padding: 5px 5px 8px;
+  margin: 0;
+  min-width: 0;
+}
+.settings .mod-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 5px;
+  margin: 0;
+  font-weight: 400;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.mod-option:hover {
+  background: #edf2eb;
+}
+.mod-option input {
+  margin: 2px 0 0;
+  flex-shrink: 0;
+  accent-color: #1a3c2b;
+}
+.mod-option > span {
+  min-width: 0;
+}
+.mod-name {
+  display: block;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.mod-version,
+.mod-dependencies {
+  display: block;
+  margin-top: 3px;
+  color: #627063;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.mod-picker fieldset:disabled {
+  opacity: 0.55;
+}
+.mod-picker fieldset:disabled .mod-option {
+  cursor: default;
+  background: transparent;
+}
 .hint {
   font-size: 12px;
   color: #627063;
@@ -521,6 +598,12 @@ h2 {
   .settings select {
     grid-column: 2;
   }
+  .mod-picker {
+    grid-column: 1 / -1;
+  }
+  .settings .mod-option {
+    margin: 0;
+  }
   .estimate {
     grid-column: 1;
     border: 0;
@@ -697,6 +780,11 @@ h2 {
 .material-list td span {
   margin-left: 10px;
   color: #657465;
+}
+.material-list td .applied-material {
+  display: block;
+  margin: 4px 0 0;
+  color: #526452;
 }
 .material-list th:last-child,
 .material-list td:last-child {

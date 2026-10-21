@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as T from "three";
+import { blockStateText } from "../blockState";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { ConvexGeometry } from "three/addons/geometries/ConvexGeometry.js";
 import type { Display } from "../types";
@@ -489,6 +490,12 @@ export default function PairedViewer({
                   {Object.entries(hovered[index].properties)
                     .map(([key, value]) => `${key}=${value}`)
                     .join(" / ")}
+                </span>
+              )}
+              {hovered[index].copied_material && (
+                <span className="applied-material">
+                  Applied material:{" "}
+                  {blockStateText(hovered[index].copied_material)}
                 </span>
               )}
               <span className="block-coordinate">

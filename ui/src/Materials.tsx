@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import type { Display } from "./types";
+import { blockStateText } from "./blockState";
 
 export default function Materials({
   source,
@@ -29,9 +30,7 @@ export default function Materials({
   const total = materials.reduce((sum, item) => sum + item.count, 0);
   const query = search.trim().toLowerCase();
   const filtered = materials.filter((item) =>
-    `${item.name} ${item.material} ${Object.entries(item.properties)
-      .map(([key, value]) => `${key}=${value}`)
-      .join(" ")}`
+    `${blockStateText(item)} ${item.material} ${item.copied_material ? blockStateText(item.copied_material) : ""}`
       .toLowerCase()
       .includes(query),
   );
@@ -117,7 +116,7 @@ export default function Materials({
               <tbody>
                 {filtered.map((item) => (
                   <tr
-                    key={`${item.name}:${item.material}:${JSON.stringify(item.properties)}`}
+                    key={`${item.name}:${item.material}:${JSON.stringify(item.properties)}:${JSON.stringify(item.copied_material)}`}
                   >
                     <td>
                       <strong>{item.name}</strong>
@@ -127,6 +126,12 @@ export default function Materials({
                           .map(([key, value]) => ` / ${key}=${value}`)
                           .join("")}
                       </span>
+                      {item.copied_material && (
+                        <span className="applied-material">
+                          Applied material:{" "}
+                          {blockStateText(item.copied_material)}
+                        </span>
+                      )}
                     </td>
                     <td>{item.count.toLocaleString()}</td>
                   </tr>
