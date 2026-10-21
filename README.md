@@ -20,7 +20,7 @@ Try the included [demo hull](examples/demo-hull.blueprint) if you want a small s
 
 Open or drop a `.blueprint`, `.nbt` or `.litematic` file. For an FtD source, choose **Create NBT** or **Litematic**. Minecraft sources convert to **FtD blueprint**. Choose the output scale and, for Minecraft output, a material preference: **Balanced**, **Material first** or **Color first**.
 
-Click **Convert**, inspect both views and read the conversion notices, then click **Export file**. Hover over either preview to see the block name, material, state and comparison origin. You can also focus a viewer and press **I** to inspect its center. These coordinates describe the displayed origin, which can differ from an FtD block's saved anchor.
+Click **Convert**, inspect both views, then click **Export file**. Hover over either preview to see the block name, material, and state. You can also focus a viewer and press **I** to inspect its center. These coordinates describe the displayed origin, which can differ from an FtD block's saved anchor.
 
 The **Build materials** list counts source parts or exported blocks. a 4 m source beam counts as one part. The converted list counts the actual serialized blocks, grouping their facing and other placement states under the same block name. Search the list or collapse it to give the previews more space. Linked cameras help you check the same area in both views. Changing the source or conversion options clears the previous export until you convert again.
 
