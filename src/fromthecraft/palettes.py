@@ -140,7 +140,9 @@ def mc_target_material(part, preference):
         return State("minecraft:" + dye + "_stained_glass")
     if part.material in {"Wood", "Reinforced Wood"} and preference != "color":
         return State("minecraft:" + nearest_color("wood", part.color) + "_planks")
-    if preference == "color" or (preference == "balanced" and np.ptp(part.color) > 0.15):
+    if preference == "color" or (
+        preference == "balanced" and (np.ptp(part.color) > 0.15 or max(part.color) < 0.35)
+    ):
         dye = nearest_color("dye", part.color)
         return State("minecraft:" + dye + "_concrete")
     if part.material == "Stone":
