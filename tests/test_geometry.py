@@ -34,6 +34,15 @@ def test_requested_scale_choices_expand_or_reduce_beam(scale, length, count):
         assert any("Reduced" in message for message in result.notices)
 
 
+@pytest.mark.parametrize("shape", ["wedge", "corner", "curve"])
+@pytest.mark.parametrize("z", [-3, 0, 1, 3])
+def test_quarter_scale_translated_small_primitives_do_not_vanish(shape, z):
+    transform = np.eye(4)
+    transform[2, 3] = z
+    scene = Scene([Part("thin hull", shape, (1, 1, 1), transform, "Metal", (0.5, 0.5, 0.5))], "blueprint")
+    assert len(voxelize(scene, 0.25)[0]) >= 1
+
+
 @pytest.mark.parametrize("rot,axis,sign", [(0, 2, 1), (1, 0, 1), (2, 2, -1), (4, 1, -1), (10, 1, 1)])
 def test_beam_rotations_keep_all_four_cells(rot, axis, sign):
     bp = json.loads(Path("tests/fixtures/asymmetric.blueprint").read_text())
@@ -135,4 +144,4 @@ def test_all_vanilla_ids_have_honest_policy_and_rotations_are_proper():
     assert mc_policy("mod:unknown")[0] == "unrecognized"
     for i in range(24):
         assert np.linalg.det(rotation(i)) == 1
-    assert all("SizeId" in entry for entry in CATALOG.values())
+    assert all("SizeId" in entry or "Footprint" in entry for entry in CATALOG.values())

@@ -135,6 +135,8 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None):
         corners = np.array(list(product(*[(0, n) for n in part.size])))
         world = (corners @ part.transform[:3, :3].T + part.transform[:3, 3]) * scale
         pmin, pmax = np.floor(world.min(0) + 1e-7).astype(int), np.ceil(world.max(0) - 1e-7).astype(int)
+        if int(np.prod(pmax - pmin)) > MAX_PARTS:
+            raise ValueError("One part's sampled footprint is too large; choose a smaller scale")
         candidates = np.array(list(product(*[range(a, b) for a, b in zip(pmin, pmax)])))
         if len(candidates) == 0:
             continue
@@ -154,7 +156,7 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None):
                     tuple(position - origin), replace(part, shape=shape) if shape != part.shape else part
                 )
         # Forward sampling protects small features that fall between target sample centers.
-        if not aligned or min(part.size) < 0.5:
+        if not aligned or min(part.size) * scale < 0.5:
             axes = [
                 (np.arange(max(1, int(np.ceil(n * scale * 2)))) + 0.5) / max(1, int(np.ceil(n * scale * 2)))
                 for n in part.size

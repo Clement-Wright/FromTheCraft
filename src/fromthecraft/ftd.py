@@ -1,9 +1,11 @@
 import json
+import re
 from collections import Counter
 from pathlib import Path
 
 import numpy as np
 
+from .catalog import game_assets, installed_catalog
 from .geometry import quaternion, rotation
 from .model import MAX_PARTS, Part, Scene
 
@@ -18,6 +20,8 @@ SLOPE_IDS = {
     for k, v in CATALOG.items()
     if v["Name"].lower() == v["Material"].lower() + " down slope (1m)"
 }
+LOCAL_CATALOG, CATALOG_INFO = installed_catalog(game_assets(), CATALOG)
+CATALOG.update(LOCAL_CATALOG)
 COLORS = {
     "Metal": (0.45, 0.45, 0.45),
     "Wood": (0.56, 0.38, 0.2),
@@ -40,7 +44,10 @@ def ftd_policy(entry):
         return "approximated", "corner"
     if "slope" in name or "wedge" in name:
         return "approximated", "wedge"
-    if name.endswith("block") or ("beam (" in name and "slope" not in name):
+    if re.fullmatch(
+        r"(wood|metal|alloy|stone|glass|rubber|lead|heavy armour|reinforced wood|light-weight alloy) (block|beam \([1-4]m\))",
+        name,
+    ):
         return "mapped", "box"
     return "approximated", "box"
 
@@ -89,10 +96,12 @@ def read_blueprint(content: bytes) -> Scene:
             if policy == "skipped":
                 notices["Intentionally skipped mimics (ordinary host blocks retained)"] += 1
                 continue
-            extent = FOOTPRINTS[str(entry["SizeId"])]
+            extent = entry.get("Footprint")
+            if extent is None:
+                extent = FOOTPRINTS[str(entry["SizeId"])]
             size = tuple(extent[a + "n"] + extent[a + "p"] + 1 for a in "xyz")
             material = entry["Material"]
-            color = np.array(COLORS.get(material, (0.45, 0.45, 0.45)))
+            color = np.array(entry.get("DefaultColor", COLORS.get(material, (0.45, 0.45, 0.45))))
             if not isinstance(paint, int) or not 0 <= paint < max(1, len(colors)):
                 raise ValueError("Blueprint paint index is outside COL")
             if colors:
