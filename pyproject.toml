@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fromthecraft"
+version = "0.1.0"
+description = "Local structural conversion between From the Depths and Minecraft"
+requires-python = ">=3.12"
+dependencies = ["numpy==2.2.6", "nbtlib==2.0.4", "litemapy==0.11.0b0", "fastapi==0.115.12", "uvicorn==0.34.2", "python-multipart==0.0.20"]
+
+[project.optional-dependencies]
+dev = ["pytest==8.3.5", "httpx==0.28.1", "ruff==0.11.13", "pyinstaller==6.13.0"]
+
+[project.scripts]
+fromthecraft = "fromthecraft.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+fromthecraft = ["data/*.json", "data/*.txt", "static/**/*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"

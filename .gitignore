@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+node_modules/
+ui/dist/
+build/
+dist/
+research/
+artifacts/
+.superdesign/
+.serena/
+*.log

@@ -1,0 +1,52 @@
+{
+  "FileModelVersion": {
+    "Major": 1,
+    "Minor": 0
+  },
+  "Name": "Asymmetric structural fixture",
+  "Version": 1,
+  "SavedTotalBlockCount": 4,
+  "ItemDictionary": {
+    "0": "ab699540-efc8-4592-bc97-204f6a874b3a",
+    "1": "a7f5d8de-4882-4111-9d01-436493e5b2d8",
+    "2": "9a0ae372-beb4-4009-b14e-36ed0715af73",
+    "3": "2d519ca8-1f12-4a8e-9340-aa6648b5e799"
+  },
+  "Blueprint": {
+    "Name": "Asymmetric",
+    "GameVersion": "3.8.5.11",
+    "LocalPosition": "0,0,0",
+    "LocalRotation": "0,0,0,1",
+    "SCs": [],
+    "BLP": [
+      "0,0,0",
+      "2,0,0",
+      "0,1,0",
+      "0,0,2"
+    ],
+    "BLR": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "BlockIds": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "BCI": [
+      0,
+      1,
+      0,
+      0
+    ],
+    "COL": [
+      "0,0,0,0",
+      "1,0,0,1"
+    ],
+    "TotalBlockCount": 4,
+    "AliveCount": 4
+  }
+}
