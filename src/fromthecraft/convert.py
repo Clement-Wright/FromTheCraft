@@ -31,6 +31,11 @@ def convert(scene, output, scale=1, preference="balanced", progress=None, cancel
         content = write_blueprint(cells)
         notices["FtD output schema targets reference version 3.8.5.11; in-game acceptance is unverified"] += 1
         return Result(content, read_blueprint(content), output, offset, notices)
+    for part in cells.values():
+        if part.transparent and part.shape.startswith(("slab_", "step_")):
+            notices[
+                "Approximated partial glass with full transparent blocks; vanilla has no glass slabs or stairs"
+            ] += 1
     states = {p: mc_target(part, preference) for p, part in cells.items()}
     size = tuple(np.max(list(cells), axis=0) + 1)
     writer, reader = (

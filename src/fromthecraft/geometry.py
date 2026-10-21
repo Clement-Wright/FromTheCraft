@@ -140,9 +140,10 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None):
         candidates = np.array(list(product(*[range(a, b) for a, b in zip(pmin, pmax)])))
         if len(candidates) == 0:
             continue
-        # Aligned full boxes need no occupancy samples, including thin structural plates.
+        # Boxes on integer grid boundaries need no occupancy samples.
         aligned = np.allclose(part.transform[:3, :3], np.round(part.transform[:3, :3]))
-        if part.shape == "box" and aligned:
+        grid_box = np.allclose(world, np.round(world), rtol=0, atol=1e-7)
+        if part.shape == "box" and aligned and grid_box:
             masks = np.ones((len(candidates), 8), dtype=bool)
         else:
             inv = np.linalg.inv(part.transform)
@@ -156,9 +157,14 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None):
                     tuple(position - origin), replace(part, shape=shape) if shape != part.shape else part
                 )
         # Forward sampling protects small features that fall between target sample centers.
-        if not aligned or min(part.size) * scale < 0.5:
+        if not aligned or min(part.size) * scale < 0.5 or part.shape != "box":
             axes = [
-                (np.arange(max(1, int(np.ceil(n * scale * 2)))) + 0.5) / max(1, int(np.ceil(n * scale * 2)))
+                np.r_[
+                    1e-4,
+                    (np.arange(max(1, int(np.ceil(n * scale * 2)))) + 0.5)
+                    / max(1, int(np.ceil(n * scale * 2))),
+                    1 - 1e-4,
+                ]
                 for n in part.size
             ]
             seeds = np.array(list(product(*axes)))
@@ -169,7 +175,9 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None):
             for position in positions:
                 cells.setdefault(tuple(position - origin), replace(part, shape="box"))
         if len(cells) > MAX_PARTS:
-            raise ValueError(f"Output exceeds {MAX_PARTS:,} occupied cells; choose 1× or a smaller structure")
+            raise ValueError(
+                f"Output exceeds {MAX_PARTS:,} occupied cells; choose a smaller scale or structure"
+            )
     if cancelled and cancelled():
         raise Cancelled("Conversion cancelled")
     return cells, tuple(float(n) for n in origin)

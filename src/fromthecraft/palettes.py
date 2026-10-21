@@ -1,4 +1,5 @@
 import json
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -65,6 +66,27 @@ def validate_state(state: State):
             raise ValueError(f"Invalid 1.21.1 state {state.name}[{key}={value}]")
 
 
+WOODS = {
+    "oak": (0.63, 0.51, 0.31),
+    "spruce": (0.44, 0.32, 0.19),
+    "birch": (0.77, 0.70, 0.50),
+    "dark_oak": (0.26, 0.17, 0.08),
+    "mangrove": (0.45, 0.20, 0.17),
+    "cherry": (0.90, 0.70, 0.67),
+    "acacia": (0.66, 0.36, 0.20),
+    "warped": (0.17, 0.42, 0.39),
+    "crimson": (0.40, 0.19, 0.27),
+    "bamboo": (0.76, 0.69, 0.31),
+    "jungle": (0.63, 0.46, 0.32),
+}
+
+
+@lru_cache(maxsize=512)
+def nearest_color(family, color):
+    palette = WOODS if family == "wood" else DYES
+    return min(palette, key=lambda name: sum((a - b) ** 2 for a, b in zip(palette[name], color)))
+
+
 def mc_material(name):
     short = name.split(":", 1)[-1]
     color = (0.5, 0.5, 0.5)
@@ -74,33 +96,30 @@ def mc_material(name):
             break
     if "glass" in short or short == "ice":
         return "Glass", color if color != (0.5, 0.5, 0.5) else (0.7, 0.85, 0.87)
-    if any(
-        token in short
-        for token in (
-            "oak",
-            "spruce",
-            "birch",
-            "jungle",
-            "acacia",
-            "mangrove",
-            "cherry",
-            "bamboo",
-            "crimson",
-            "warped",
-        )
-    ):
-        return "Wood", (0.59, 0.43, 0.25)
+    for wood in sorted(WOODS, key=len, reverse=True):
+        if wood in short:
+            return "Wood", WOODS[wood]
     if any(
         token in short for token in ("iron", "copper", "gold", "anvil", "hopper", "piston", "rail", "chain")
     ):
+        for metal, rgb in {
+            "gold": (0.98, 0.86, 0.27),
+            "copper": (0.75, 0.42, 0.30),
+            "iron": (0.87, 0.87, 0.87),
+        }.items():
+            if metal in short:
+                color = rgb
+                break
         return "Metal", color
     return "Stone", color
 
 
 def mc_target(part, preference):
     base = mc_target_material(part, preference)
+    if part.transparent:
+        return base
     if part.shape.startswith("slab_") or part.shape.startswith("step_"):
-        stem = "oak" if part.material == "Wood" else "stone"
+        stem = nearest_color("wood", part.color) if part.material in {"Wood", "Reinforced Wood"} else "stone"
         if part.shape.startswith("slab_"):
             return State(
                 f"minecraft:{stem}_slab", (("type", part.shape.split("_")[1]), ("waterlogged", "false"))
@@ -117,12 +136,12 @@ def mc_target(part, preference):
 
 def mc_target_material(part, preference):
     if part.transparent:
-        dye = min(DYES, key=lambda k: np.linalg.norm(np.array(DYES[k]) - part.color))
+        dye = nearest_color("dye", part.color)
         return State("minecraft:" + dye + "_stained_glass")
-    if part.material in {"Wood", "Reinforced Wood"}:
-        return State("minecraft:oak_planks")
+    if part.material in {"Wood", "Reinforced Wood"} and preference != "color":
+        return State("minecraft:" + nearest_color("wood", part.color) + "_planks")
     if preference == "color" or (preference == "balanced" and np.ptp(part.color) > 0.15):
-        dye = min(DYES, key=lambda k: np.linalg.norm(np.array(DYES[k]) - part.color))
+        dye = nearest_color("dye", part.color)
         return State("minecraft:" + dye + "_concrete")
     if part.material == "Stone":
         return State("minecraft:stone")

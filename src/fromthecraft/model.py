@@ -4,7 +4,7 @@ from typing import Callable
 
 import numpy as np
 
-MAX_PARTS = 200_000
+MAX_PARTS = 500_000
 MAX_VOLUME = 8_000_000
 MAX_AXIS = 2048
 DATA_VERSION = 3955

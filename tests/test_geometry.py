@@ -137,6 +137,26 @@ def test_thin_sections_and_mimic_host_survive():
     assert any("decoration" in k for k in scene.notices)
 
 
+def test_axis_aligned_half_height_uses_target_slab():
+    part = Part("half height", "box", (1, 0.5, 1), np.eye(4), "Stone", (0.5, 0.5, 0.5))
+    result = convert(Scene([part], "blueprint"), "nbt")
+    assert result.scene.parts[0].state.name == "minecraft:stone_slab"
+    assert dict(result.scene.parts[0].state.properties)["type"] == "bottom"
+
+
+def test_glass_slope_preserves_transparency_when_vanilla_has_no_glass_stair():
+    part = Part("glass slope", "wedge", (1, 1, 1), np.eye(4), "Glass", (0.5, 0.8, 0.8), True)
+    result = convert(Scene([part], "blueprint"), "nbt")
+    assert all(part.transparent for part in result.scene.parts)
+    assert any("glass slabs" in message for message in result.notices)
+
+
+def test_long_wedge_keeps_thin_leading_section():
+    part = Part("sloped beam", "wedge", (1, 1, 4), np.eye(4), "Metal", (0.5, 0.5, 0.5))
+    cells, _ = voxelize(Scene([part], "blueprint"))
+    assert {position[2] for position in cells} == {0, 1, 2, 3}
+
+
 def test_all_vanilla_ids_have_honest_policy_and_rotations_are_proper():
     assert len(BLOCKS) == 1060
     assert {mc_policy(k)[0] for k in BLOCKS} <= {"mapped", "approximated", "skipped"}
