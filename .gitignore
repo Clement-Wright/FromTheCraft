@@ -12,3 +12,7 @@ artifacts/
 .superdesign/
 .serena/
 *.log
+*.tsbuildinfo
+ui/test-results/
+ui/playwright-report/
+src/fromthecraft/static/
