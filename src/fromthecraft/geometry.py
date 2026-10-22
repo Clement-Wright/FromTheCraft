@@ -157,27 +157,30 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=Fals
         # Boxes on integer grid boundaries need no occupancy samples.
         aligned = np.allclose(part.transform[:3, :3], np.round(part.transform[:3, :3]))
         grid_box = np.allclose(world, np.round(world), rtol=0, atol=1e-7)
-        if part.shape == "box" and aligned and grid_box:
+        solid_box = part.shape == "box" and aligned and grid_box
+        inv = None if solid_box else np.linalg.inv(part.transform)
+        # Keep the denser detail grid within the former sampling memory budget.
+        batch_size = max(1, 1_572_864 // sample_count)
+        for start in range(0, len(candidates), batch_size):
+            if cancelled and cancelled():
+                raise Cancelled("Conversion cancelled")
+            batch = candidates[start : start + batch_size]
             masks = None
-        else:
-            inv = np.linalg.inv(part.transform)
-            masks = np.empty((len(candidates), sample_count), dtype=bool)
-            for start in range(0, len(candidates), 2048):
-                batch = candidates[start : start + 2048]
+            if not solid_box:
                 points = (batch[:, None, :] + samples).reshape(-1, 3) / scale
                 local = (points @ inv[:3, :3].T + inv[:3, 3]) / part.size
-                masks[start : start + len(batch)] = contains(part.shape, local).reshape(-1, sample_count)
-        for row, position in enumerate(candidates):
-            mask = masks[row] if masks is not None else None
-            if mask is None or mask.any():
-                key = tuple(position - origin)
-                bits = (
-                    full_mask
-                    if mask is None
-                    else int.from_bytes(np.packbits(mask, bitorder="little").tobytes(), "little")
-                )
-                occupancy[key] = occupancy.get(key, 0) | bits
-                cells.setdefault(key, part)
+                masks = contains(part.shape, local).reshape(-1, sample_count)
+            for row, position in enumerate(batch):
+                mask = masks[row] if masks is not None else None
+                if mask is None or mask.any():
+                    key = tuple(position - origin)
+                    bits = (
+                        full_mask
+                        if mask is None
+                        else int.from_bytes(np.packbits(mask, bitorder="little").tobytes(), "little")
+                    )
+                    occupancy[key] = occupancy.get(key, 0) | bits
+                    cells.setdefault(key, part)
         # Forward sampling protects small features that fall between target sample centers.
         if not aligned or min(part.size) * scale < 0.5 or part.shape != "box":
             axes = [

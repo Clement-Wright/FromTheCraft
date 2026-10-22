@@ -215,6 +215,8 @@ def compare(source, exports, points, contract, samples=16):
     parts = [(part, *bounds(part)) for part in source.parts]
     offset = np.floor(np.min([minimum for _, minimum, _ in parts], axis=0) + 1e-6).astype(int)
     decoded = {label: nbt_states(path, offset) for label, path in exports.items()}
+    coordinates = np.r_[0.0001, (np.arange(samples) + 0.5) / samples, 0.9999]
+    surface_grid = np.array(list(product(coordinates, repeat=3)))
     grid = np.array(list(product((np.arange(samples) + 0.5) / samples, repeat=3)))
     report = {
         "offset": offset.tolist(),
@@ -232,12 +234,16 @@ def compare(source, exports, points, contract, samples=16):
                 "false_positive_samples": 0,
                 "false_negative_samples": 0,
                 "sampled_full_source_cells_made_partial": 0,
+                "source_projected_rays": 0,
+                "uncovered_projected_rays": 0,
             }
             for label in exports
         }
         for delta in product(range(-1, 2), repeat=3):
             position = tuple(int(value) for value in center + delta)
             original, contributors = native_occupancy(parts, grid + position)
+            surface, _ = native_occupancy(parts, surface_grid + position)
+            source_cube = surface.reshape((len(coordinates),) * 3)
             cell = {
                 "position": position,
                 "source_fraction": float(original.mean()),
@@ -247,6 +253,12 @@ def compare(source, exports, points, contract, samples=16):
             for label, states in decoded.items():
                 state = states.get(position)
                 target = target_occupancy(state, grid, contract)
+                target_cube = target_occupancy(state, surface_grid, contract).reshape(source_cube.shape)
+                source_rays = uncovered_rays = 0
+                for axis in range(3):
+                    source_projection = source_cube.any(axis=axis)
+                    source_rays += int(source_projection.sum())
+                    uncovered_rays += int((source_projection & ~target_cube.any(axis=axis)).sum())
                 false_positive, false_negative = (
                     int((target & ~original).sum()),
                     int((original & ~target).sum()),
@@ -257,15 +269,22 @@ def compare(source, exports, points, contract, samples=16):
                     "false_positive_fraction": false_positive / len(grid),
                     "false_negative_fraction": false_negative / len(grid),
                     "mismatch_fraction": (false_positive + false_negative) / len(grid),
+                    "source_projected_rays": source_rays,
+                    "uncovered_projected_rays": uncovered_rays,
                 }
                 total = totals[label]
                 total["mismatched_samples"] += false_positive + false_negative
                 total["false_positive_samples"] += false_positive
                 total["false_negative_samples"] += false_negative
+                total["source_projected_rays"] += source_rays
+                total["uncovered_projected_rays"] += uncovered_rays
                 total["sampled_full_source_cells_made_partial"] += int(original.all() and not target.all())
             cells.append(cell)
         for total in totals.values():
             total["mismatch_fraction"] = total["mismatched_samples"] / (len(grid) * len(cells))
+            total["uncovered_ray_fraction"] = total["uncovered_projected_rays"] / max(
+                1, total["source_projected_rays"]
+            )
         report["points"].append({"reported_origin": list(point), "neighborhood": totals, "cells": cells})
     return report
 

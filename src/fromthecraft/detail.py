@@ -7,20 +7,20 @@ import numpy as np
 
 from .model import State
 
-# Stratify each thickness axis at 1/16; the other two axes sample each octant.
-# This resolves 1/8 layers, 3/16 panels and 1/2 bytes without a 16³ grid per cell.
+# Resolve every 1/16 target interval in all three axes. Coarser stratified
+# grids miss slice intersections or land on boards' inner boundaries.
+VOLUME_SAMPLES = np.asarray(list(product((np.arange(16) + 0.5) / 16, repeat=3)))
+_rays = (np.arange(16) + 0.5) / 16
+# Probe near both ends of each ray so a thin hull face cannot fall between
+# interior samples. These probes constrain coverage, not estimated volume.
 DETAIL_SAMPLES = np.concatenate(
-    [
-        np.asarray(
-            list(
-                product(
-                    *[(np.arange(16) + 0.5) / 16 if a == axis else (0.13, 0.37, 0.63, 0.87) for a in range(3)]
-                )
-            )
-        )
+    [VOLUME_SAMPLES]
+    + [
+        np.asarray(list(product(*[(0.0001, 0.9999) if a == axis else _rays for a in range(3)])))
         for axis in range(3)
     ]
 )
+VOLUME_MASK = (1 << len(VOLUME_SAMPLES)) - 1
 OCTANTS = (DETAIL_SAMPLES >= 0.5).astype(int) @ [4, 2, 1]
 BYTE_SLOTS = tuple(
     f"{y}_{z}{x}" for x in ("west", "east") for y in ("bottom", "top") for z in ("north", "south")
@@ -122,11 +122,7 @@ def fit_detail(mask):
     if mask == full:
         return None
     occupied = np.asarray([bool(mask & (1 << i)) for i in range(len(DETAIL_SAMPLES))])
-    byte_mask = sum(1 << i for i in range(8) if occupied[OCTANTS == i].mean() >= 0.5)
-    # Keep tiny nonzero details if no octant reaches the majority threshold.
-    if not byte_mask:
-        counts = [occupied[OCTANTS == i].sum() for i in range(8)]
-        byte_mask = 1 << int(np.argmax(counts))
+    byte_mask = sum(1 << i for i in range(8) if occupied[OCTANTS == i].any())
     byte = state(
         "copycats:copycat_byte",
         **{slot: str(bool(byte_mask & (1 << i))).lower() for i, slot in enumerate(BYTE_SLOTS)},
@@ -136,23 +132,29 @@ def fit_detail(mask):
     choices = [(None, full), *candidates(), (byte, byte_bits)]
     for target, groups in half_layer_options():
         levels = [min(range(9), key=lambda n: (mask ^ variants[n]).bit_count()) for variants in groups]
-        if not any(levels):
-            continue
-        properties = {
-            **dict(target.properties),
-            "negative_layers": str(levels[0]),
-            "positive_layers": str(levels[1]),
-        }
-        choices.append(
-            (
-                State(target.name, tuple(sorted(properties.items()))),
-                groups[0][levels[0]] | groups[1][levels[1]],
+        # Also offer an outward-rounded profile. The least-volume fit can leave
+        # a zero-height half at a slope tip, opening a hole in a continuous hull.
+        covering = [
+            next(n for n in range(9) if not (mask & variants[8]) & ~variants[n]) for variants in groups
+        ]
+        for negative, positive in dict.fromkeys((tuple(levels), tuple(covering))):
+            if not (negative or positive):
+                continue
+            properties = {
+                **dict(target.properties),
+                "negative_layers": str(negative),
+                "positive_layers": str(positive),
+            }
+            choices.append(
+                (
+                    State(target.name, tuple(sorted(properties.items()))),
+                    groups[0][negative] | groups[1][positive],
+                )
             )
-        )
 
     def error(item):
         target, occupied_bits = item
-        difference = (mask ^ occupied_bits).bit_count()
+        difference = ((mask ^ occupied_bits) & VOLUME_MASK).bit_count()
         if target and difference:
             # Prefer a continuous layer over a broken footprint for a tiny fit gain.
             difference += {
@@ -161,6 +163,9 @@ def fit_detail(mask):
                 "copycats:copycat_byte": 4,
                 "create:copycat_panel": 1,
             }.get(target.name, 0)
-        return difference
+        # Retain the sampled solid, including near-face probes, before reducing
+        # excess volume. Projections alone allow open boards to replace a solid
+        # corner and leave gaps when viewed from an oblique angle.
+        return ((mask & ~occupied_bits).bit_count(), difference)
 
     return min(choices, key=error)[0]
