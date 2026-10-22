@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fromthecraft"
-version = "0.3.0"
+version = "0.4.0"
 description = "Local structural conversion between From the Depths and Minecraft"
 license = "GPL-3.0-or-later"
 requires-python = ">=3.12"
-dependencies = ["numpy==2.2.6", "nbtlib==2.0.4", "litemapy==0.11.0b0", "fastapi==0.115.12", "uvicorn==0.34.2", "python-multipart==0.0.20"]
+dependencies = ["numpy==2.2.6", "nbtlib==2.0.4", "litemapy==0.11.0b0", "fastapi==0.115.12", "uvicorn==0.34.2", "python-multipart==0.0.20", "UnityPy==1.25.3"]
 
 [project.optional-dependencies]
 dev = ["pytest==8.3.5", "httpx==0.28.1", "ruff==0.11.13", "pyinstaller==6.13.0"]

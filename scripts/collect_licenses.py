@@ -2,6 +2,7 @@ import importlib.metadata
 import json
 import shutil
 import sys
+from packaging.requirements import Requirement
 from pathlib import Path
 
 
@@ -27,6 +28,16 @@ def main():
         "idna",
         "pyinstaller",
     ]
+    pending = ["UnityPy"]
+    while pending:
+        name = pending.pop()
+        if name in packages:
+            continue
+        packages.append(name)
+        for raw in importlib.metadata.requires(name) or []:
+            requirement = Requirement(raw)
+            if requirement.marker is None or requirement.marker.evaluate({"extra": ""}):
+                pending.append(requirement.name)
     for name in packages:
         distribution = importlib.metadata.distribution(name)
         folder = destination / name

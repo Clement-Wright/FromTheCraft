@@ -18,3 +18,6 @@ ui/test-results-*/
 ui/playwright-report/
 src/fromthecraft/static/
 FromTheCraft.spec
+
+.pytest-tmp-*/
+FtDProbe.spec

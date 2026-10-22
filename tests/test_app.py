@@ -7,8 +7,12 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture
-def client():
-    from fromthecraft.app import app
+def client(monkeypatch):
+    import fromthecraft.app as module
+    from fromthecraft.textures import TextureLibrary
+
+    monkeypatch.setattr(module, "TextureLibrary", lambda: TextureLibrary(discover=False))
+    app = module.app
 
     with TestClient(app) as client:
         session = client.get("/api/session").json()
@@ -162,3 +166,55 @@ def test_reverse_slope_preview_matches_serialized_blueprint_with_native_vertices
     assert status["converted"]["groups"][0]["vertices"]
     exported = client.get("/api/export", params={"result_id": status["result_id"]})
     assert preview(read_file(exported.content, "blueprint"), status["offset"]) == status["converted"]
+
+
+def test_detailed_preview_and_export_stay_identical_after_loading_textures(client):
+    from test_textures import archive, cube, png
+    from fromthecraft.convert import read_file
+    from fromthecraft.preview import preview
+    import fromthecraft.app as module
+
+    client.post(
+        "/api/source",
+        files={"file": ("slopes.blueprint", Path("tests/fixtures/painted-slopes.blueprint").read_bytes())},
+    )
+    client.post("/api/convert", json={"format": "nbt", "mods": ["copycats"], "detailed_copycats": True})
+    ready = finished(client)
+    assert ready["state"] == "ready", ready
+    before = client.get("/api/export", params={"result_id": ready["result_id"]}).content
+    raw = png()
+    data = archive(
+        {
+            "assets/minecraft/blockstates/red_wool.json": {
+                "variants": {"": {"model": "minecraft:block/red_wool"}}
+            },
+            "assets/minecraft/models/block/red_wool.json": cube("minecraft:block/red_wool"),
+            "assets/minecraft/textures/block/red_wool.png": raw,
+        }
+    )
+    loaded = client.post("/api/textures", files={"file": ("original.zip", data)})
+    assert loaded.status_code == 200
+    after = client.get("/api/export", params={"result_id": ready["result_id"]}).content
+    assert before == after
+    status = client.get("/api/status").json()
+    session = module.sessions[client.cookies["fromthecraft"]]
+    assert status["converted"] == preview(read_file(after, "nbt"), status["offset"], session.textures)
+    faces = [block["textures"] for block in loaded.json()["converted"]["blocks"] if block.get("textures")]
+    assert faces
+    key = next(iter(faces[0].values()))
+    assert client.get(f"/api/textures/{key}").status_code == 403
+    assert client.get(f"/api/textures/{key}", params={"token": session.token}).content == raw
+    assert client.get("/api/textures/missing", params={"token": session.token}).status_code == 404
+
+
+def test_chunked_upload_limit_is_enforced_before_multipart_parsing(client):
+    def chunks():
+        yield b'--original\r\nContent-Disposition: form-data; name="file"; filename="test.blueprint"\r\nContent-Type: application/octet-stream\r\n\r\n'
+        yield b"x" * (17 * 1024**2)
+        yield b"y" * (17 * 1024**2)
+        yield b"\r\n--original--\r\n"
+
+    response = client.post(
+        "/api/source", content=chunks(), headers={"Content-Type": "multipart/form-data; boundary=original"}
+    )
+    assert response.status_code == 413

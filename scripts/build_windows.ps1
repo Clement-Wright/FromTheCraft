@@ -17,7 +17,7 @@ try {
 } finally { Pop-Location }
 & $pythonExe scripts/collect_licenses.py
 if ($LASTEXITCODE -ne 0) { throw 'License collection failed.' }
-& $pythonExe -m PyInstaller --noconfirm --clean --windowed --onedir --name FromTheCraft --distpath $outputRoot --paths src --collect-data fromthecraft --copy-metadata litemapy --add-data 'build/THIRD_PARTY_LICENSES;THIRD_PARTY_LICENSES' scripts/portable_entry.py
+& $pythonExe -m PyInstaller --noconfirm --clean --windowed --onedir --name FromTheCraft --distpath $outputRoot --paths src --collect-data fromthecraft --collect-all UnityPy --collect-data archspec --exclude-module fmod_toolkit --exclude-module pyfmodex --copy-metadata litemapy --add-data 'build/THIRD_PARTY_LICENSES;THIRD_PARTY_LICENSES' scripts/portable_entry.py
 if ($LASTEXITCODE -ne 0) { throw 'Windows packaging failed.' }
 Copy-Item -LiteralPath README.md -Destination (Join-Path $portableFolder 'README.md')
 Copy-Item -LiteralPath COPYING -Destination (Join-Path $portableFolder 'COPYING')

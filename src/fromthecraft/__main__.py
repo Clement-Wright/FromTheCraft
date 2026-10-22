@@ -29,6 +29,11 @@ def main():
     )
     conversion.add_argument("--shell-thickness", type=int, choices=[1, 2, 3, 4], default=1)
     conversion.add_argument(
+        "--detailed-copycats",
+        action="store_true",
+        help="Fit finer layers, bytes and panels (requires --mod copycats)",
+    )
+    conversion.add_argument(
         "--mod",
         action="append",
         choices=sorted(MODS),
@@ -53,6 +58,7 @@ def main():
             hollow=args.hollow,
             shell_thickness=args.shell_thickness,
             mods=args.mod,
+            detailed_copycats=args.detailed_copycats,
         )
         with args.destination.open("xb") as target:
             target.write(result.content)

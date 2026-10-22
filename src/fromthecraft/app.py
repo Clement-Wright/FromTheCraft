@@ -15,11 +15,13 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.formparsers import MultiPartException
 
 from .convert import convert, read_file
 from .ftd import CATALOG_INFO
 from .model import Cancelled, Result, Scene
 from .preview import preview
+from .textures import TextureLibrary, MAX_ARCHIVE_BYTES
 from .compatibility import mod_choices, selected_mods
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
@@ -33,6 +35,7 @@ shutdown_callback = None
 
 @dataclass
 class Session:
+    textures: TextureLibrary | None = None
     token: str = field(default_factory=lambda: secrets.token_urlsafe(32))
     lock: threading.RLock = field(default_factory=threading.RLock)
     cancelled: threading.Event = field(default_factory=threading.Event)
@@ -71,8 +74,22 @@ def session_for(request):
 @app.middleware("http")
 async def local_service(request, call_next):
     if request.method not in {"GET", "HEAD"}:
-        if int(request.headers.get("content-length", "0")) > 33 * 1024**2:
-            return Response("Upload exceeds 32 MiB", status_code=413)
+        limit = MAX_ARCHIVE_BYTES + 1024**2 if request.url.path == "/api/textures" else 33 * 1024**2
+        if int(request.headers.get("content-length", "0")) > limit:
+            return Response("Upload exceeds the local file limit", status_code=413)
+        incoming, exceeded = 0, False
+        receive = request._receive
+
+        async def bounded_receive():
+            nonlocal incoming, exceeded
+            message = await receive()
+            incoming += len(message.get("body", b""))
+            if incoming > limit:
+                exceeded = True
+                raise MultiPartException("Upload exceeds the local file limit")
+            return message
+
+        request._receive = bounded_receive
         origin = request.headers.get("origin")
         if origin and origin != str(request.base_url).rstrip("/"):
             return Response("Only this local application may submit files", status_code=403)
@@ -83,6 +100,8 @@ async def local_service(request, call_next):
         if not secrets.compare_digest(request.headers.get("x-fromthecraft-token", ""), session.token):
             return Response("Invalid local session token", status_code=403)
     response = await call_next(request)
+    if request.method not in {"GET", "HEAD"} and exceeded:
+        response = Response("Upload exceeds the local file limit", status_code=413)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Cache-Control"] = "no-store"
@@ -104,13 +123,50 @@ def open_session(request: Request, response: Response):
             sid = secrets.token_urlsafe(24)
             session = sessions[sid] = Session()
         response.set_cookie("fromthecraft", sid, httponly=True, samesite="strict")
+    with session.lock:
+        if session.textures is None:
+            session.textures = TextureLibrary()
     return {
         "token": session.token,
         "can_close": shutdown_callback is not None,
         "ftd_catalog": CATALOG_INFO["version"],
         "ftd_catalog_entries": CATALOG_INFO["entries"],
         "mod_choices": mod_choices(),
+        "textures": session.textures.status(),
     }
+
+
+@app.get("/api/textures/{key}")
+def texture_image(request: Request, key: str, token: str = ""):
+    session = session_for(request)
+    if not secrets.compare_digest(token, session.token):
+        raise HTTPException(403, "Invalid local session token")
+    try:
+        return Response(session.textures.image(key), media_type="image/png")
+    except KeyError as exc:
+        raise HTTPException(404, "Texture not found") from exc
+
+
+@app.post("/api/textures")
+async def texture_archive(request: Request, file: UploadFile = File(...)):
+    session = session_for(request)
+    content = await file.read(MAX_ARCHIVE_BYTES + 1)
+    await file.close()
+    try:
+        await run_in_threadpool(session.textures.add_archive, content, file.filename or "textures.zip")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    with session.lock:
+        source, result, generation = session.source, session.result, session.generation
+    source_display = await run_in_threadpool(preview, source, (0, 0, 0), session.textures) if source else None
+    converted = (
+        await run_in_threadpool(preview, result.scene, result.offset, session.textures) if result else None
+    )
+    with session.lock:
+        if generation != session.generation:
+            raise HTTPException(409, "Source or conversion changed while loading textures")
+        session.converted = converted
+    return {"source": source_display, "converted": converted, "textures": session.textures.status()}
 
 
 @app.get("/api/heartbeat")
@@ -143,7 +199,7 @@ async def open_source(request: Request, file: UploadFile = File(...)):
         raise HTTPException(413, "File exceeds 32 MiB")
     try:
         scene = await run_in_threadpool(read_file, content, Path(file.filename or "").suffix)
-        display = await run_in_threadpool(preview, scene)
+        display = await run_in_threadpool(preview, scene, (0, 0, 0), session.textures)
     except ValueError as exc:
         with session.lock:
             if generation == session.generation:
@@ -162,6 +218,7 @@ class Options(BaseModel):
     format: Literal["nbt", "litematic", "blueprint"]
     scale: Literal[0.25, 0.5, 1, 2, 4] = 1
     preference: Literal["balanced", "material", "color"] = "balanced"
+    detailed_copycats: bool = False
     hollow: bool = False
     shell_thickness: Literal[1, 2, 3, 4] = 1
     mods: list[str] = Field(default_factory=list, max_length=8)
@@ -199,8 +256,9 @@ def start_conversion(request: Request, options: Options):
                 options.hollow,
                 options.shell_thickness,
                 options.mods,
+                options.detailed_copycats,
             )
-            display = preview(result.scene, result.offset)
+            display = preview(result.scene, result.offset, session.textures)
             with session.lock:
                 if generation == session.generation and not cancelled.is_set():
                     session.result, session.converted = result, display
