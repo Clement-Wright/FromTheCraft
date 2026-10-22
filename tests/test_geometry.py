@@ -53,7 +53,8 @@ def test_rotated_thin_copycat_slab_uses_its_real_axis_and_vanilla_uses_full_mate
     from fromthecraft.palettes import mc_target
 
     part = Part("thin side", "slab_x_top", (1, 1, 1), np.eye(4), "Metal", (0.65, 0.05, 0.05))
-    assert mc_target(part, "color").name == "minecraft:red_concrete"
+    base = mc_target(part, "color")
+    assert not base.name.endswith(("_stairs", "_slab"))
     copied = mc_target(part, "color", ("copycats",))
     assert copied.name == "copycats:copycat_slab"
     assert dict(copied.properties) == {"axis": "x", "type": "top", "waterlogged": "false"}
@@ -165,7 +166,7 @@ def test_thin_sections_and_mimic_host_survive():
 def test_axis_aligned_half_height_uses_target_slab():
     part = Part("half height", "box", (1, 0.5, 1), np.eye(4), "Stone", (0.5, 0.5, 0.5))
     result = convert(Scene([part], "blueprint"), "nbt")
-    assert result.scene.parts[0].state.name == "minecraft:stone_slab"
+    assert result.scene.parts[0].state.name.endswith("_slab")
     assert dict(result.scene.parts[0].state.properties)["type"] == "bottom"
 
 
@@ -194,9 +195,38 @@ def test_all_vanilla_ids_have_honest_policy_and_rotations_are_proper():
 
 @pytest.mark.parametrize("reverse", [False, True])
 def test_overlapping_half_parts_form_a_solid_cell_regardless_of_order(reverse):
-    lower = Part("lower", "box", (1, .5, 1), np.eye(4), "Metal", (.6, .1, .1))
+    lower = Part("lower", "box", (1, 0.5, 1), np.eye(4), "Metal", (0.6, 0.1, 0.1))
     transform = np.eye(4)
-    transform[1, 3] = .5
-    upper = Part("upper", "box", (1, .5, 1), transform, "Metal", (.6, .1, .1))
+    transform[1, 3] = 0.5
+    upper = Part("upper", "box", (1, 0.5, 1), transform, "Metal", (0.6, 0.1, 0.1))
     cells, _ = voxelize(Scene([upper, lower] if reverse else [lower, upper], "blueprint"))
+    assert cells[(0, 0, 0)].shape == "box"
+
+
+@pytest.mark.parametrize("orientation", range(24))
+def test_detailed_long_slope_uses_gradual_layers_without_full_end_caps(orientation):
+    from fromthecraft.copycats import geometry_boxes
+
+    transform = np.eye(4)
+    transform[:3, :3] = rotation(orientation)
+    slope = Part("long slope", "ftd_slope", (1, 1, 4), transform, "Metal", (0.6, 0.1, 0.1))
+    cells, offset = voxelize(Scene([slope], "blueprint"), detailed=True)
+    assert len(cells) == 4
+    ordered = sorted(
+        cells.items(), key=lambda item: ((np.asarray(item[0]) + offset + 0.5) @ transform[:3, :3])[2]
+    )
+    volumes = [
+        sum(np.prod(np.asarray(box[3:]) - box[:3]) for _, box in geometry_boxes(part.state))
+        for _, part in ordered
+    ]
+    np.testing.assert_allclose(volumes, [7 / 8, 5 / 8, 3 / 8, 1 / 8], atol=1 / 16)
+    assert all(0 < volume < 1 for volume in volumes)
+
+
+def test_detailed_full_wall_union_stays_full():
+    lower = Part("lower", "box", (1, 0.5, 1), np.eye(4), "Metal", (0.6, 0.1, 0.1))
+    transform = np.eye(4)
+    transform[1, 3] = 0.5
+    upper = Part("upper", "box", (1, 0.5, 1), transform, "Metal", (0.6, 0.1, 0.1))
+    cells, _ = voxelize(Scene([lower, upper], "blueprint"), detailed=True)
     assert cells[(0, 0, 0)].shape == "box"

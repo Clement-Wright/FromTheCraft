@@ -46,7 +46,7 @@ def test_down_slope_keeps_high_end_at_negative_local_z_in_source_and_export():
     group = preview(scene)["groups"][0]
     vertices = np.asarray(group["vertices"]).reshape(-1, 3)
     np.testing.assert_array_equal(vertices[vertices[:, 1] == 1, 2], 0)
-    target = convert(scene, "nbt")
+    target = convert(scene, "nbt", mods=("copycats",))
     assert target.scene.parts[0].state.name.endswith("_stairs")
     assert dict(target.scene.parts[0].state.properties)["facing"] == "north"
 

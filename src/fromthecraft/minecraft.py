@@ -11,7 +11,7 @@ from .compatibility import MOD_STATES
 from .geometry import checked_size
 from .model import DATA_VERSION, MAX_PARTS, MAX_VOLUME, Part, Scene, State
 from .palettes import mc_material, mc_policy, validate_state
-from .copycats import block_entity, block_state_tag, read_material
+from .copycats import block_entity, block_state_tag, geometry_boxes, read_material
 
 MAX_BYTES = 128 * 1024**2
 
@@ -171,6 +171,32 @@ def accept(cells, position, block, notices, entity=None):
 def scene_from_cells(cells, format, notices):
     parts = []
     for position, state in cells.items():
+        boxes = geometry_boxes(state)
+        if boxes is not None:
+            appearances = dict(state.copied_materials)
+            for slot, box in boxes:
+                visual = appearances.get(slot, state.copied_material or state)
+                material, color = mc_material(visual.name)
+                transform = np.eye(4)
+                transform[:3, 3] = np.asarray(position) + box[:3]
+                size = tuple(high - low for low, high in zip(box[:3], box[3:]))
+                parts.append(
+                    Part(
+                        state.name,
+                        "box",
+                        size,
+                        transform,
+                        material,
+                        color,
+                        material == "Glass",
+                        state,
+                        position,
+                        slot,
+                    )
+                )
+                if len(parts) > MAX_PARTS:
+                    raise ValueError(f"Input exceeds {MAX_PARTS:,} render parts")
+            continue
         transform = np.eye(4)
         transform[:3, 3] = position
         material, color = mc_material((state.copied_material or state).name)
@@ -223,9 +249,12 @@ def scene_from_cells(cells, format, notices):
                             color,
                             material == "Glass",
                             state,
+                            position,
                         )
                     )
-        parts.append(Part(state.name, shape, size, transform, material, color, material == "Glass", state))
+        parts.append(
+            Part(state.name, shape, size, transform, material, color, material == "Glass", state, position)
+        )
     return Scene(parts, format, notices, str(DATA_VERSION))
 
 

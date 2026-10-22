@@ -20,6 +20,7 @@ def convert(
     hollow=False,
     shell_thickness=1,
     mods=(),
+    detailed_copycats=False,
 ):
     mods = selected_mods(mods)
     if scale not in (0.25, 0.5, 1, 2, 4):
@@ -30,7 +31,9 @@ def convert(
         raise ValueError("Shell thickness must be 1, 2, 3, or 4 cells")
     if output not in ({"nbt", "litematic"} if scene.format == "blueprint" else {"blueprint"}):
         raise ValueError("Choose a format in the other game")
-    cells, offset = voxelize(scene, scale, progress, cancelled)
+    if detailed_copycats and ("copycats" not in mods or output == "blueprint"):
+        raise ValueError("Detailed Copycats requires Copycats+ and Minecraft output")
+    cells, offset = voxelize(scene, scale, progress, cancelled, detailed=detailed_copycats)
     if not cells:
         raise ValueError("No structural blocks remain after skipped blocks")
     notices = Counter(scene.notices)
@@ -67,6 +70,8 @@ def convert(
         notices["Used matching full blocks where the selected material has no slab or stair"] += (
             full_fallbacks
         )
+    if detailed_copycats:
+        notices["Detailed Copycats fits layers, panels and bytes to sampled source geometry"] += 1
     if mods:
         notices[
             "Export requires these selected mods: " + ", ".join(MODS[slug]["label"] for slug in mods)

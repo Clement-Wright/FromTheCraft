@@ -1,4 +1,4 @@
-from itertools import product
+from itertools import product, islice
 from dataclasses import replace
 from collections import deque
 
@@ -130,7 +130,12 @@ def cell_shape(mask):
     return "box"
 
 
-def voxelize(scene: Scene, scale=1, progress=None, cancelled=None):
+def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=False):
+    from .detail import DETAIL_SAMPLES, fit_detail
+
+    samples = DETAIL_SAMPLES if detailed else SAMPLES
+    sample_count = len(samples)
+    full_mask = (1 << sample_count) - 1
     cells, occupancy, fallback = {}, {}, {}
     low, high = bounds(scene, scale)
     origin = np.floor(low + 1e-6).astype(int)
@@ -153,16 +158,24 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None):
         aligned = np.allclose(part.transform[:3, :3], np.round(part.transform[:3, :3]))
         grid_box = np.allclose(world, np.round(world), rtol=0, atol=1e-7)
         if part.shape == "box" and aligned and grid_box:
-            masks = np.ones((len(candidates), 8), dtype=bool)
+            masks = None
         else:
             inv = np.linalg.inv(part.transform)
-            points = (candidates[:, None, :] + SAMPLES).reshape(-1, 3) / scale
-            local = (points @ inv[:3, :3].T + inv[:3, 3]) / part.size
-            masks = contains(part.shape, local).reshape(-1, 8)
-        for position, mask in zip(candidates, masks):
-            if mask.any():
+            masks = np.empty((len(candidates), sample_count), dtype=bool)
+            for start in range(0, len(candidates), 2048):
+                batch = candidates[start : start + 2048]
+                points = (batch[:, None, :] + samples).reshape(-1, 3) / scale
+                local = (points @ inv[:3, :3].T + inv[:3, 3]) / part.size
+                masks[start : start + len(batch)] = contains(part.shape, local).reshape(-1, sample_count)
+        for row, position in enumerate(candidates):
+            mask = masks[row] if masks is not None else None
+            if mask is None or mask.any():
                 key = tuple(position - origin)
-                bits = sum(1 << bit for bit in np.flatnonzero(mask))
+                bits = (
+                    full_mask
+                    if mask is None
+                    else int.from_bytes(np.packbits(mask, bitorder="little").tobytes(), "little")
+                )
                 occupancy[key] = occupancy.get(key, 0) | bits
                 cells.setdefault(key, part)
         # Forward sampling protects small features that fall between target sample centers.
@@ -176,18 +189,28 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None):
                 ]
                 for n in part.size
             ]
-            seeds = np.array(list(product(*axes)))
-            seeds = seeds[contains(part.shape, seeds)] * part.size
-            world_seeds = (seeds @ part.transform[:3, :3].T + part.transform[:3, 3]) * scale
-            positions = np.floor(world_seeds + 1e-7).astype(int)
             seed_masks = {}
-            octants = ((world_seeds - positions >= 0.5).astype(int) @ [4, 2, 1]).tolist()
-            for position, octant in zip(positions, octants):
-                key = tuple(position - origin)
-                if key not in occupancy:
-                    seed_masks[key] = seed_masks.get(key, 0) | (1 << octant)
+            source_seeds = product(*axes)
+            while batch := list(islice(source_seeds, 4096)):
+                if cancelled and cancelled():
+                    raise Cancelled("Conversion cancelled")
+                seeds = np.asarray(batch)
+                seeds = seeds[contains(part.shape, seeds)] * part.size
+                world_seeds = (seeds @ part.transform[:3, :3].T + part.transform[:3, 3]) * scale
+                positions = np.floor(world_seeds + 1e-7).astype(int)
+                octants = ((world_seeds - positions >= 0.5).astype(int) @ [4, 2, 1]).tolist()
+                for position, octant in zip(positions, octants):
+                    key = tuple(position - origin)
+                    if key not in occupancy:
+                        seed_masks[key] = seed_masks.get(key, 0) | (1 << octant)
             for position, mask in seed_masks.items():
                 previous, owner = fallback.get(position, (0, part))
+                if detailed:
+                    selected = np.asarray([bool(mask & (1 << bit)) for bit in range(8)])
+                    octants = (samples >= 0.5).astype(int) @ [4, 2, 1]
+                    mask = int.from_bytes(
+                        np.packbits(selected[octants], bitorder="little").tobytes(), "little"
+                    )
                 fallback[position] = (previous | mask, owner)
         if len(cells) > MAX_PARTS:
             raise ValueError(
@@ -200,10 +223,21 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None):
             occupancy[position], cells[position] = mask, part
     if len(cells) > MAX_PARTS:
         raise ValueError(f"Output exceeds {MAX_PARTS:,} occupied cells; choose a smaller scale or structure")
-    for position, part in cells.items():
+    for index, (position, part) in enumerate(cells.items()):
+        if index % 256 == 0:
+            if cancelled and cancelled():
+                raise Cancelled("Conversion cancelled")
+            if progress:
+                progress(0.75 + 0.03 * index / max(1, len(cells)))
         mask = occupancy[position]
-        occupied = np.asarray([bool(mask & (1 << bit)) for bit in range(8)])
-        cells[position] = replace(part, shape=cell_shape(occupied))
+        if detailed:
+            target = fit_detail(mask)
+            cells[position] = (
+                replace(part, shape="detailed", state=target) if target else replace(part, shape="box")
+            )
+        else:
+            occupied = np.asarray([bool(mask & (1 << bit)) for bit in range(8)])
+            cells[position] = replace(part, shape=cell_shape(occupied))
     return cells, tuple(float(n) for n in origin)
 
 

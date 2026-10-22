@@ -1,11 +1,12 @@
 import json
+from dataclasses import replace
 from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
 
 from .model import State
-from .compatibility import MODS, MOD_BLOCKS, MOD_STATES, VARIANTS
+from .compatibility import BUILDING_BLOCKS, MODS, MOD_STATES, VANILLA_BLOCKS, VARIANTS
 
 REGISTRY = json.loads((Path(__file__).with_name("data") / "minecraft_1_21_1.json").read_text())
 BLOCKS = {"minecraft:" + b["name"]: b for b in REGISTRY["blocks"]}
@@ -35,6 +36,8 @@ def mc_policy(name):
         return "mapped", "verified mod building block"
     if name not in BLOCKS:
         return "unrecognized", "placeholder"
+    if name in BUILDING_BLOCKS:
+        return "mapped", "verified building material"
     short = name.split(":", 1)[1]
     if name in AIR:
         return "skipped", "air"
@@ -97,7 +100,7 @@ def nearest_color(family, color):
 
 
 def mc_material(name):
-    entry = MOD_BLOCKS.get(name) or VARIANTS.get(name)
+    entry = BUILDING_BLOCKS.get(name) or VARIANTS.get(name)
     if entry:
         return entry["material"], tuple(entry["rgb"])
     short = name.split(":", 1)[-1]
@@ -130,16 +133,21 @@ def mc_material(name):
 def mod_target(base, material, color, transparent, preference, mods):
     if transparent:
         return base
-    choices = [block for slug in mods for block in MODS[slug]["blocks"]]
+    choices = [*VANILLA_BLOCKS.values(), *(block for slug in mods for block in MODS[slug]["blocks"])]
+    family = "Wood" if material == "Reinforced Wood" else material
     if preference == "material" or (material in {"Wood", "Reinforced Wood"} and preference != "color"):
-        family = "Wood" if material == "Reinforced Wood" else material
         choices = [block for block in choices if block["material"] == family]
 
     def distance(rgb):
         return sum((a - b) ** 2 for a, b in zip(rgb, color))
 
-    best = min(choices, key=lambda block: distance(block["rgb"]), default=None)
-    if best and distance(best["rgb"]) < distance(mc_material(base.name)[1]):
+    def score(block_material, rgb):
+        penalty = 0.0125 if preference == "balanced" and block_material != family else 0
+        return distance(rgb) + penalty
+
+    best = min(choices, key=lambda block: score(block["material"], block["rgb"]), default=None)
+    base_material, base_rgb = mc_material(base.name)
+    if best and score(best["material"], best["rgb"]) < score(base_material, base_rgb):
         return State(best["name"], tuple(sorted(best["properties"].items())))
     return base
 
@@ -148,6 +156,8 @@ def mc_target(part, preference, mods=()):
     base = mc_target_material(part, preference)
     if mods:
         base = mod_target(base, part.material, tuple(part.color), part.transparent, preference, mods)
+    if part.shape == "detailed" and part.state is not None:
+        return replace(part.state, copied_material=base)
     partial = part.shape.startswith(("slab_", "step_"))
     slab_axis = part.shape.split("_")[1] if part.shape.startswith(("slab_x_", "slab_z_")) else "y"
     slab_half = part.shape.rsplit("_", 1)[-1]
@@ -173,7 +183,7 @@ def mc_target(part, preference, mods=()):
             return base
         stem = base.name.removesuffix("_planks")
         suffix = "_slab" if part.shape.startswith("slab_") else "_stairs"
-        entry = MOD_BLOCKS.get(base.name)
+        entry = BUILDING_BLOCKS.get(base.name)
         name = entry.get("slab" if suffix == "_slab" else "stairs") if entry else stem + suffix
         if not name or name not in BLOCKS and name not in MOD_STATES:
             return base
@@ -194,12 +204,14 @@ def mc_target_material(part, preference):
         dye = nearest_color("dye", part.color)
         return State("minecraft:" + dye + "_stained_glass")
     if part.material in {"Wood", "Reinforced Wood"} and preference != "color":
-        return State("minecraft:" + nearest_color("wood", part.color) + "_planks")
-    if preference == "color" or (
+        base = State("minecraft:" + nearest_color("wood", part.color) + "_planks")
+    elif preference == "color" or (
         preference == "balanced" and (np.ptp(part.color) > 0.15 or max(part.color) < 0.35)
     ):
         dye = nearest_color("dye", part.color)
-        return State("minecraft:" + dye + "_concrete")
-    if part.material == "Stone":
-        return State("minecraft:stone")
-    return State("minecraft:iron_block")
+        base = State("minecraft:" + dye + "_concrete")
+    elif part.material == "Stone":
+        base = State("minecraft:stone")
+    else:
+        base = State("minecraft:iron_block")
+    return mod_target(base, part.material, tuple(part.color), False, preference, ())

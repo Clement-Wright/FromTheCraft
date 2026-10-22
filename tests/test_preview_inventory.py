@@ -36,3 +36,25 @@ def test_source_inventory_counts_full_beams_as_parts_not_voxels():
     display = preview(Scene([part], "blueprint"))
     assert display["materials"][0]["count"] == 1
     assert display["blocks"][0]["name"] == "Metal beam (4m)"
+
+
+def test_mixed_copycat_bytes_count_one_exported_host_block():
+    from fromthecraft.minecraft import read_structure, write_structure
+
+    state = State(
+        "copycats:copycat_byte",
+        (("bottom_northwest", "true"), ("top_southeast", "true")),
+        copied_materials=(
+            ("bottom_northwest", State("minecraft:red_concrete")),
+            ("top_southeast", State("minecraft:glass")),
+        ),
+    )
+    display = preview(read_structure(write_structure({(0, 0, 0): state}, (1, 1, 1))))
+    assert display["count"] == 2
+    assert len(display["materials"]) == 1
+    assert display["materials"][0]["count"] == 1
+    assert len(display["materials"][0]["copied_materials"]) == 2
+    assert {block["copied_material"]["name"] for block in display["blocks"]} == {
+        "minecraft:red_concrete",
+        "minecraft:glass",
+    }

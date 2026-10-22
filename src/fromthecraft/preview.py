@@ -4,11 +4,14 @@ from .geometry import bounds
 from .ftd_shapes import vertices
 
 
-def preview(scene, offset=(0, 0, 0)):
+def preview(scene, offset=(0, 0, 0), textures=None):
     groups, blocks, block_ids, inventory = {}, [], {}, {}
+    counted = set()
     for part in scene.parts:
         properties = tuple(sorted(part.state.properties)) if part.state else ()
         copied = part.state.copied_material if part.state else None
+        if part.state and part.material_slot:
+            copied = dict(part.state.copied_materials).get(part.material_slot, copied)
         extra = (
             {"copied_material": {"name": copied.name, "properties": dict(copied.properties)}}
             if copied
@@ -17,11 +20,35 @@ def preview(scene, offset=(0, 0, 0)):
         identity = (part.identity, part.material, properties, copied)
         if identity not in block_ids:
             block_ids[identity] = len(blocks)
-            blocks.append(
-                {"name": part.identity, "material": part.material, "properties": dict(properties), **extra}
-            )
-        material_key = (part.identity, part.material, copied)
-        inventory[material_key] = inventory.get(material_key, 0) + 1
+            block = {
+                "name": part.identity,
+                "material": part.material,
+                "properties": dict(properties),
+                **extra,
+            }
+            if textures:
+                if scene.format == "blueprint":
+                    texture = textures.ftd_face(part.material)
+                    faces = (
+                        {face: texture for face in ("east", "west", "up", "down", "south", "north")}
+                        if texture
+                        else {}
+                    )
+                else:
+                    faces = textures.block_faces(
+                        copied.name if copied else part.identity, copied.properties if copied else properties
+                    )
+                if faces:
+                    block["textures"] = faces
+            blocks.append(block)
+        slots = part.state.copied_materials if part.state else ()
+        inventory_material = "Mixed" if slots else part.material
+        inventory_copied = part.state.copied_material if part.state else None
+        material_key = (part.identity, inventory_material, inventory_copied, slots)
+        placement = part.source_cell
+        if placement is None or placement not in counted:
+            inventory[material_key] = inventory.get(material_key, 0) + 1
+            counted.add(placement)
         key = (part.shape, part.transparent)
         group = groups.setdefault(
             key,
@@ -53,12 +80,22 @@ def preview(scene, offset=(0, 0, 0)):
                 "properties": {},
                 "count": count,
                 **(
+                    {
+                        "copied_materials": [
+                            {"slot": slot, "name": state.name, "properties": dict(state.properties)}
+                            for slot, state in slots
+                        ]
+                    }
+                    if slots
+                    else {}
+                ),
+                **(
                     {"copied_material": {"name": copied.name, "properties": dict(copied.properties)}}
                     if copied
                     else {}
                 ),
             }
-            for (name, material, copied), count in sorted(
+            for (name, material, copied, slots), count in sorted(
                 inventory.items(), key=lambda item: (-item[1], item[0][0], str(item[0][2]))
             )
         ],

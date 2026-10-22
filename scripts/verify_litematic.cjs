@@ -2,13 +2,16 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const nbt = require('../ui/node_modules/prismarine-nbt');
+const {verifyCopycat, verifyTypes} = require('./verify_nbt.cjs');
 
 function stateKey(state) {
   return state.Name + JSON.stringify(Object.entries(state.Properties ?? {}).sort());
 }
 
 async function read(file) {
-  return nbt.simplify((await nbt.parse(fs.readFileSync(file))).parsed);
+  const raw = (await nbt.parse(fs.readFileSync(file))).parsed;
+  verifyTypes(raw);
+  return nbt.simplify(raw);
 }
 
 (async () => {
@@ -26,6 +29,7 @@ async function read(file) {
       const { x:w, y:h, z:l } = region.Size;
       assert(w > 0 && h > 0 && l > 0);
       const palette = region.BlockStatePalette.map(stateKey);
+      const regionStates = new Map();
       const bits = BigInt(Math.max(2, Math.ceil(Math.log2(palette.length))));
       const mask = (1n << bits) - 1n;
       const longs = region.BlockStates.map(value => BigInt.asUintN(64, BigInt(value)));
@@ -39,12 +43,14 @@ async function read(file) {
         const x = i % w, z = Math.floor(i/w) % l, y = Math.floor(i/(w*l));
         const key = [x+region.Position.x,y+region.Position.y,z+region.Position.z].join(',');
         assert.equal(palette[index], states.get(key), `${file}: cell ${key}`);
+        regionStates.set(key, region.BlockStatePalette[index]);
         occupied++;
       }
       for (const entity of region.TileEntities) {
         const key = [entity.x+region.Position.x,entity.y+region.Position.y,entity.z+region.Position.z].join(',');
         assert(entities.has(key), `${file}: unexpected block entity at ${key}`);
         assert.deepEqual(appearance(entity), appearance(entities.get(key)), `${file}: block entity ${key}`);
+        verifyCopycat(regionStates.get(key), entity);
         entityCount++;
       }
     }

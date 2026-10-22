@@ -62,6 +62,7 @@ def main():
     )
     parser.add_argument("folder", type=Path)
     parser.add_argument("--litematic", action="store_true", help="Also test every fixture as Litematic")
+    parser.add_argument("--detailed-copycats", action="store_true")
     parser.add_argument("--mods", nargs="*", choices=sorted(MODS), default=[])
     parser.add_argument("--output", type=Path, default=Path("artifacts/fixture-checks"))
     args = parser.parse_args()
@@ -88,7 +89,7 @@ def main():
             )
             for format in ["nbt", "litematic"] if args.litematic else ["nbt"]:
                 started = time.perf_counter()
-                result = convert(scene, format, mods=args.mods)
+                result = convert(scene, format, mods=args.mods, detailed_copycats=args.detailed_copycats)
                 display = preview(result.scene, result.offset)
                 (output / (path.stem + "." + format)).write_bytes(result.content)
                 report[format] = {

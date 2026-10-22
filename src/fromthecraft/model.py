@@ -15,6 +15,7 @@ class State:
     name: str
     properties: tuple[tuple[str, str], ...] = ()
     copied_material: "State | None" = None
+    copied_materials: tuple[tuple[str, "State"], ...] = ()
 
 
 @dataclass
@@ -27,6 +28,8 @@ class Part:
     color: tuple[float, float, float]
     transparent: bool = False
     state: State | None = None
+    source_cell: tuple[int, int, int] | None = None
+    material_slot: str | None = None
 
 
 @dataclass
