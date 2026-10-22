@@ -98,6 +98,6 @@ test("real detailed ship exports and displays local Minecraft and FtD textures",
     fullPage: true,
   });
   expect(imageResponses.length).toBeGreaterThan(0);
-  expect(imageResponses.every(status => status === 200)).toBe(true);
+  expect(imageResponses.every((status) => status === 200)).toBe(true);
   expect(errors).toEqual([]);
 });

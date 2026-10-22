@@ -10,3 +10,5 @@ Real ship files in the owner's Downloads folder are read-only local test inputs.
 `painted-slopes.blueprint` was authored for FromTheCraft. It contains six painted metal/glass slopes with catalog IDs, for checking vanilla full-block fallback and opt-in Copycats+ materials.
 
 `copycats-materials.json`, `.nbt` and `.litematic` are an original four-block fixture derived from the documented Copycats+ 3.0.4 Minecraft 1.21.1 serialization schema. They cover red stairs, glass stairs, blue slabs and stained-glass slabs. They were not captured in Minecraft and do not establish in-game compatibility. No mod assets are included. Run `node scripts/verify_copycats.cjs` from the repository root for an independent parser and tag-type check.
+
+`copycats-shapes.json` records original numeric shape observations, defaults and source links from pinned Copycats+ and Create. It contains no mod meshes or images. The independent geometry checker uses it to interpret serialized target boxes.

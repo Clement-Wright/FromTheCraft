@@ -1,0 +1,1303 @@
+{
+  "purpose": "Original FromTheCraft research contract and fixtures. No upstream assets or source redistribution.",
+  "verification": "Pinned Copycats+ source and exact Create jar inspected; not loaded inside Minecraft.",
+  "target": {
+    "minecraft": "1.21.1",
+    "data_version": 3955,
+    "loader": "NeoForge",
+    "copycats": "3.0.4",
+    "copycats_commit": "9f808ac0b437817696c50f2e8b57f590b1196094",
+    "create": "6.0.10",
+    "create_commit_from_jar_manifest": "ac0c444d9828da3453ae8cc65338e8de063286fb",
+    "create_jar_sha256": "ef87fe5709f1ba1f5b8bb20a2925b5afb4669e178fd6d8bf10c167759eefe37a"
+  },
+  "license": {
+    "copycats": "All Rights Reserved (LICENSE at pinned commit)",
+    "create": "MIT code; assets separately All Rights Reserved (LICENSE.md_create-1.21.1 in pinned jar)",
+    "handling": "Use schemas and independently derived dimensions. Do not distribute upstream models, textures, code, or jars."
+  },
+  "sources": {
+    "registration": "https://github.com/copycats-plus/copycats/blob/9f808ac0b437817696c50f2e8b57f590b1196094/common/src/main/java/com/copycatsplus/copycats/CCBlocks.java",
+    "be_registration": "https://github.com/copycats-plus/copycats/blob/9f808ac0b437817696c50f2e8b57f590b1196094/common/src/main/java/com/copycatsplus/copycats/CCBlockEntityTypes.java",
+    "shapes": "https://github.com/copycats-plus/copycats/blob/9f808ac0b437817696c50f2e8b57f590b1196094/common/src/main/java/com/copycatsplus/copycats/CCShapes.java",
+    "layer": "https://github.com/copycats-plus/copycats/blob/9f808ac0b437817696c50f2e8b57f590b1196094/common/src/main/java/com/copycatsplus/copycats/content/copycat/layer/CopycatLayerBlock.java",
+    "bytes": "https://github.com/copycats-plus/copycats/blob/9f808ac0b437817696c50f2e8b57f590b1196094/common/src/main/java/com/copycatsplus/copycats/content/copycat/bytes/CopycatByteBlock.java",
+    "byte_panels": "https://github.com/copycats-plus/copycats/blob/9f808ac0b437817696c50f2e8b57f590b1196094/common/src/main/java/com/copycatsplus/copycats/content/copycat/byte_panel/CopycatBytePanelBlock.java",
+    "half_panel": "https://github.com/copycats-plus/copycats/blob/9f808ac0b437817696c50f2e8b57f590b1196094/common/src/main/java/com/copycatsplus/copycats/content/copycat/half_panel/CopycatHalfPanelBlock.java",
+    "single_schema": "https://github.com/copycats-plus/copycats/blob/9f808ac0b437817696c50f2e8b57f590b1196094/common/src/main/java/com/copycatsplus/copycats/foundation/copycat/ICopycatBlockEntity.java",
+    "multi_schema": "https://github.com/copycats-plus/copycats/blob/9f808ac0b437817696c50f2e8b57f590b1196094/common/src/main/java/com/copycatsplus/copycats/foundation/copycat/multistate/MaterialItemStorage.java",
+    "multi_container": "https://github.com/copycats-plus/copycats/blob/9f808ac0b437817696c50f2e8b57f590b1196094/common/src/main/java/com/copycatsplus/copycats/foundation/copycat/multistate/IMultiStateCopycatBlockEntity.java",
+    "multi_consumption": "https://github.com/copycats-plus/copycats/blob/9f808ac0b437817696c50f2e8b57f590b1196094/common/src/main/java/com/copycatsplus/copycats/foundation/copycat/multistate/IMultiStateCopycatBlock.java",
+    "create_ct_mixin": "https://github.com/copycats-plus/copycats/blob/9f808ac0b437817696c50f2e8b57f590b1196094/common/src/main/java/com/copycatsplus/copycats/mixin/foundation/copycat/CopycatBlockEntityMixin.java",
+    "create_shapes": "https://github.com/Creators-of-Create/Create/blob/ac0c444d9828da3453ae8cc65338e8de063286fb/src/main/java/com/simibubi/create/AllShapes.java",
+    "create_be_registration": "https://github.com/Creators-of-Create/Create/blob/ac0c444d9828da3453ae8cc65338e8de063286fb/src/main/java/com/simibubi/create/AllBlockEntityTypes.java",
+    "create_panel": "https://github.com/Creators-of-Create/Create/blob/ac0c444d9828da3453ae8cc65338e8de063286fb/src/main/java/com/simibubi/create/content/decoration/copycat/CopycatPanelBlock.java",
+    "create_step": "https://github.com/Creators-of-Create/Create/blob/ac0c444d9828da3453ae8cc65338e8de063286fb/src/main/java/com/simibubi/create/content/decoration/copycat/CopycatStepBlock.java",
+    "create_be": "https://github.com/Creators-of-Create/Create/blob/ac0c444d9828da3453ae8cc65338e8de063286fb/src/main/java/com/simibubi/create/content/decoration/copycat/CopycatBlockEntity.java"
+  },
+  "geometry_units": "Box arrays [minX,minY,minZ,maxX,maxY,maxZ] in sixteenths of one block. Half-open volume; +X east, +Y up, +Z south.",
+  "nbt_primitives": {
+    "coordinates": "Int",
+    "id": "String",
+    "state.Name": "String",
+    "state.Properties values": "String, including true/false and layers 1..8",
+    "Item and consumedItem": "Compound {id: String, count: Int}; empty stack Compound {}",
+    "EnableCT and enableCT": "Byte 0|1",
+    "Material and material": "Compound {Name: String, Properties?: Compound<String>}"
+  },
+  "single_container": {
+    "ids": [
+      "copycats:copycat",
+      "create:copycat"
+    ],
+    "keys": [
+      "Material",
+      "Item",
+      "EnableCT"
+    ],
+    "validation": "Material must have a matching accepted BlockItem in Item on server read. Missing or mismatched Item can reset material to create:copycat_base. Missing CT defaults true. create:copycat CT key is added by Copycats+ mixin."
+  },
+  "multi_container": {
+    "id": "copycats:multistate_copycat",
+    "key": "material_data",
+    "slot_keys": [
+      "material",
+      "consumedItem",
+      "enableCT"
+    ],
+    "defaults": "All known slots initialize base material, empty item, CT true. Read overlays present keys; canonical write includes every slot.",
+    "item_semantics": "One count=1 per DISTINCT material ITEM across occupied slots of one BE; same-item additional slots use empty consumedItem. Original placement compares item identity, not material-state properties. Item requirements count all stored nonempty items, including inactive slots; inactive slots must remain base+empty."
+  },
+  "blocks": {
+    "copycats:copycat_layer": {
+      "be": "copycats:copycat",
+      "defaults": {
+        "facing": "up",
+        "layers": "1",
+        "waterlogged": "false"
+      },
+      "properties": {
+        "facing": [
+          "down",
+          "up",
+          "north",
+          "south",
+          "west",
+          "east"
+        ],
+        "layers": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8"
+        ],
+        "waterlogged": [
+          "false",
+          "true"
+        ]
+      },
+      "facing_convention": "Outward direction; material is anchored on the opposite boundary.",
+      "item_requirement": "layers copycat_layer items plus one material item",
+      "boxes": {
+        "down": {
+          "1": [
+            0,
+            14,
+            0,
+            16,
+            16,
+            16
+          ],
+          "2": [
+            0,
+            12,
+            0,
+            16,
+            16,
+            16
+          ],
+          "3": [
+            0,
+            10,
+            0,
+            16,
+            16,
+            16
+          ],
+          "4": [
+            0,
+            8,
+            0,
+            16,
+            16,
+            16
+          ],
+          "5": [
+            0,
+            6,
+            0,
+            16,
+            16,
+            16
+          ],
+          "6": [
+            0,
+            4,
+            0,
+            16,
+            16,
+            16
+          ],
+          "7": [
+            0,
+            2,
+            0,
+            16,
+            16,
+            16
+          ],
+          "8": [
+            0,
+            0,
+            0,
+            16,
+            16,
+            16
+          ]
+        },
+        "up": {
+          "1": [
+            0,
+            0,
+            0,
+            16,
+            2,
+            16
+          ],
+          "2": [
+            0,
+            0,
+            0,
+            16,
+            4,
+            16
+          ],
+          "3": [
+            0,
+            0,
+            0,
+            16,
+            6,
+            16
+          ],
+          "4": [
+            0,
+            0,
+            0,
+            16,
+            8,
+            16
+          ],
+          "5": [
+            0,
+            0,
+            0,
+            16,
+            10,
+            16
+          ],
+          "6": [
+            0,
+            0,
+            0,
+            16,
+            12,
+            16
+          ],
+          "7": [
+            0,
+            0,
+            0,
+            16,
+            14,
+            16
+          ],
+          "8": [
+            0,
+            0,
+            0,
+            16,
+            16,
+            16
+          ]
+        },
+        "north": {
+          "1": [
+            0,
+            0,
+            14,
+            16,
+            16,
+            16
+          ],
+          "2": [
+            0,
+            0,
+            12,
+            16,
+            16,
+            16
+          ],
+          "3": [
+            0,
+            0,
+            10,
+            16,
+            16,
+            16
+          ],
+          "4": [
+            0,
+            0,
+            8,
+            16,
+            16,
+            16
+          ],
+          "5": [
+            0,
+            0,
+            6,
+            16,
+            16,
+            16
+          ],
+          "6": [
+            0,
+            0,
+            4,
+            16,
+            16,
+            16
+          ],
+          "7": [
+            0,
+            0,
+            2,
+            16,
+            16,
+            16
+          ],
+          "8": [
+            0,
+            0,
+            0,
+            16,
+            16,
+            16
+          ]
+        },
+        "south": {
+          "1": [
+            0,
+            0,
+            0,
+            16,
+            16,
+            2
+          ],
+          "2": [
+            0,
+            0,
+            0,
+            16,
+            16,
+            4
+          ],
+          "3": [
+            0,
+            0,
+            0,
+            16,
+            16,
+            6
+          ],
+          "4": [
+            0,
+            0,
+            0,
+            16,
+            16,
+            8
+          ],
+          "5": [
+            0,
+            0,
+            0,
+            16,
+            16,
+            10
+          ],
+          "6": [
+            0,
+            0,
+            0,
+            16,
+            16,
+            12
+          ],
+          "7": [
+            0,
+            0,
+            0,
+            16,
+            16,
+            14
+          ],
+          "8": [
+            0,
+            0,
+            0,
+            16,
+            16,
+            16
+          ]
+        },
+        "west": {
+          "1": [
+            14,
+            0,
+            0,
+            16,
+            16,
+            16
+          ],
+          "2": [
+            12,
+            0,
+            0,
+            16,
+            16,
+            16
+          ],
+          "3": [
+            10,
+            0,
+            0,
+            16,
+            16,
+            16
+          ],
+          "4": [
+            8,
+            0,
+            0,
+            16,
+            16,
+            16
+          ],
+          "5": [
+            6,
+            0,
+            0,
+            16,
+            16,
+            16
+          ],
+          "6": [
+            4,
+            0,
+            0,
+            16,
+            16,
+            16
+          ],
+          "7": [
+            2,
+            0,
+            0,
+            16,
+            16,
+            16
+          ],
+          "8": [
+            0,
+            0,
+            0,
+            16,
+            16,
+            16
+          ]
+        },
+        "east": {
+          "1": [
+            0,
+            0,
+            0,
+            2,
+            16,
+            16
+          ],
+          "2": [
+            0,
+            0,
+            0,
+            4,
+            16,
+            16
+          ],
+          "3": [
+            0,
+            0,
+            0,
+            6,
+            16,
+            16
+          ],
+          "4": [
+            0,
+            0,
+            0,
+            8,
+            16,
+            16
+          ],
+          "5": [
+            0,
+            0,
+            0,
+            10,
+            16,
+            16
+          ],
+          "6": [
+            0,
+            0,
+            0,
+            12,
+            16,
+            16
+          ],
+          "7": [
+            0,
+            0,
+            0,
+            14,
+            16,
+            16
+          ],
+          "8": [
+            0,
+            0,
+            0,
+            16,
+            16,
+            16
+          ]
+        }
+      }
+    },
+    "copycats:copycat_byte": {
+      "be": "copycats:multistate_copycat",
+      "defaults": {
+        "bottom_northwest": "false",
+        "bottom_southwest": "false",
+        "top_northwest": "false",
+        "top_southwest": "false",
+        "bottom_northeast": "false",
+        "bottom_southeast": "false",
+        "top_northeast": "false",
+        "top_southeast": "false",
+        "waterlogged": "false"
+      },
+      "properties": {
+        "bottom_northwest": [
+          "false",
+          "true"
+        ],
+        "bottom_southwest": [
+          "false",
+          "true"
+        ],
+        "top_northwest": [
+          "false",
+          "true"
+        ],
+        "top_southwest": [
+          "false",
+          "true"
+        ],
+        "bottom_northeast": [
+          "false",
+          "true"
+        ],
+        "bottom_southeast": [
+          "false",
+          "true"
+        ],
+        "top_northeast": [
+          "false",
+          "true"
+        ],
+        "top_southeast": [
+          "false",
+          "true"
+        ],
+        "waterlogged": [
+          "false",
+          "true"
+        ]
+      },
+      "material_slots": [
+        "bottom_northwest",
+        "bottom_southwest",
+        "top_northwest",
+        "top_southwest",
+        "bottom_northeast",
+        "bottom_southeast",
+        "top_northeast",
+        "top_southeast"
+      ],
+      "default_material_slot": "bottom_northwest",
+      "item_requirement": "One copycat_byte item per true occupancy boolean plus distinct material item(s)",
+      "boxes_by_slot": {
+        "bottom_northwest": [
+          0,
+          0,
+          0,
+          8,
+          8,
+          8
+        ],
+        "bottom_southwest": [
+          0,
+          0,
+          8,
+          8,
+          8,
+          16
+        ],
+        "top_northwest": [
+          0,
+          8,
+          0,
+          8,
+          16,
+          8
+        ],
+        "top_southwest": [
+          0,
+          8,
+          8,
+          8,
+          16,
+          16
+        ],
+        "bottom_northeast": [
+          8,
+          0,
+          0,
+          16,
+          8,
+          8
+        ],
+        "bottom_southeast": [
+          8,
+          0,
+          8,
+          16,
+          8,
+          16
+        ],
+        "top_northeast": [
+          8,
+          8,
+          0,
+          16,
+          16,
+          8
+        ],
+        "top_southeast": [
+          8,
+          8,
+          8,
+          16,
+          16,
+          16
+        ]
+      }
+    },
+    "copycats:copycat_byte_panel": {
+      "be": "copycats:multistate_copycat",
+      "defaults": {
+        "bottom_right": "false",
+        "bottom_left": "false",
+        "top_right": "false",
+        "top_left": "false",
+        "facing": "down",
+        "waterlogged": "false"
+      },
+      "properties": {
+        "bottom_right": [
+          "false",
+          "true"
+        ],
+        "bottom_left": [
+          "false",
+          "true"
+        ],
+        "top_right": [
+          "false",
+          "true"
+        ],
+        "top_left": [
+          "false",
+          "true"
+        ],
+        "facing": [
+          "down",
+          "up",
+          "north",
+          "south",
+          "west",
+          "east"
+        ],
+        "waterlogged": [
+          "false",
+          "true"
+        ]
+      },
+      "material_slots": [
+        "bottom_right",
+        "bottom_left",
+        "top_right",
+        "top_left"
+      ],
+      "default_material_slot": "bottom_left",
+      "facing_convention": "Anchored boundary; positive face is [13,16], negative face [0,3]. Opposite to copycat_layer and create:copycat_panel.",
+      "item_requirement": "One copycat_byte_panel item per true occupancy boolean plus distinct material item(s)",
+      "boxes_by_facing_and_slot": {
+        "down": {
+          "bottom_right": [
+            0,
+            0,
+            0,
+            8,
+            3,
+            8
+          ],
+          "top_right": [
+            0,
+            0,
+            8,
+            8,
+            3,
+            16
+          ],
+          "bottom_left": [
+            8,
+            0,
+            0,
+            16,
+            3,
+            8
+          ],
+          "top_left": [
+            8,
+            0,
+            8,
+            16,
+            3,
+            16
+          ]
+        },
+        "up": {
+          "bottom_right": [
+            0,
+            13,
+            8,
+            8,
+            16,
+            16
+          ],
+          "top_right": [
+            0,
+            13,
+            0,
+            8,
+            16,
+            8
+          ],
+          "bottom_left": [
+            8,
+            13,
+            8,
+            16,
+            16,
+            16
+          ],
+          "top_left": [
+            8,
+            13,
+            0,
+            16,
+            16,
+            8
+          ]
+        },
+        "north": {
+          "bottom_right": [
+            8,
+            0,
+            0,
+            16,
+            8,
+            3
+          ],
+          "top_right": [
+            8,
+            8,
+            0,
+            16,
+            16,
+            3
+          ],
+          "bottom_left": [
+            0,
+            0,
+            0,
+            8,
+            8,
+            3
+          ],
+          "top_left": [
+            0,
+            8,
+            0,
+            8,
+            16,
+            3
+          ]
+        },
+        "south": {
+          "bottom_right": [
+            0,
+            0,
+            13,
+            8,
+            8,
+            16
+          ],
+          "top_right": [
+            0,
+            8,
+            13,
+            8,
+            16,
+            16
+          ],
+          "bottom_left": [
+            8,
+            0,
+            13,
+            16,
+            8,
+            16
+          ],
+          "top_left": [
+            8,
+            8,
+            13,
+            16,
+            16,
+            16
+          ]
+        },
+        "west": {
+          "bottom_right": [
+            0,
+            0,
+            0,
+            3,
+            8,
+            8
+          ],
+          "top_right": [
+            0,
+            8,
+            0,
+            3,
+            16,
+            8
+          ],
+          "bottom_left": [
+            0,
+            0,
+            8,
+            3,
+            8,
+            16
+          ],
+          "top_left": [
+            0,
+            8,
+            8,
+            3,
+            16,
+            16
+          ]
+        },
+        "east": {
+          "bottom_right": [
+            13,
+            0,
+            8,
+            16,
+            8,
+            16
+          ],
+          "top_right": [
+            13,
+            8,
+            8,
+            16,
+            16,
+            16
+          ],
+          "bottom_left": [
+            13,
+            0,
+            0,
+            16,
+            8,
+            8
+          ],
+          "top_left": [
+            13,
+            8,
+            0,
+            16,
+            16,
+            8
+          ]
+        }
+      }
+    },
+    "copycats:copycat_half_panel": {
+      "be": "copycats:copycat",
+      "defaults": {
+        "facing": "north",
+        "offset": "north",
+        "waterlogged": "false"
+      },
+      "properties": {
+        "facing": [
+          "down",
+          "up",
+          "north",
+          "south",
+          "west",
+          "east"
+        ],
+        "offset": [
+          "north",
+          "south",
+          "west",
+          "east"
+        ],
+        "waterlogged": [
+          "false",
+          "true"
+        ]
+      },
+      "facing_convention": "Anchored boundary; thickness 3/16. Offset is world X/Z direction except an offset along facing axis is mapped onto Y with its sign preserved.",
+      "item_requirement": "One copycat_half_panel item plus one material item",
+      "boxes_by_facing_and_offset": {
+        "down": {
+          "north": [
+            0,
+            0,
+            0,
+            16,
+            3,
+            8
+          ],
+          "south": [
+            0,
+            0,
+            8,
+            16,
+            3,
+            16
+          ],
+          "west": [
+            0,
+            0,
+            0,
+            8,
+            3,
+            16
+          ],
+          "east": [
+            8,
+            0,
+            0,
+            16,
+            3,
+            16
+          ]
+        },
+        "up": {
+          "north": [
+            0,
+            13,
+            0,
+            16,
+            16,
+            8
+          ],
+          "south": [
+            0,
+            13,
+            8,
+            16,
+            16,
+            16
+          ],
+          "west": [
+            0,
+            13,
+            0,
+            8,
+            16,
+            16
+          ],
+          "east": [
+            8,
+            13,
+            0,
+            16,
+            16,
+            16
+          ]
+        },
+        "north": {
+          "north": [
+            0,
+            0,
+            0,
+            16,
+            8,
+            3
+          ],
+          "south": [
+            0,
+            8,
+            0,
+            16,
+            16,
+            3
+          ],
+          "west": [
+            0,
+            0,
+            0,
+            8,
+            16,
+            3
+          ],
+          "east": [
+            8,
+            0,
+            0,
+            16,
+            16,
+            3
+          ]
+        },
+        "south": {
+          "north": [
+            0,
+            0,
+            13,
+            16,
+            8,
+            16
+          ],
+          "south": [
+            0,
+            8,
+            13,
+            16,
+            16,
+            16
+          ],
+          "west": [
+            0,
+            0,
+            13,
+            8,
+            16,
+            16
+          ],
+          "east": [
+            8,
+            0,
+            13,
+            16,
+            16,
+            16
+          ]
+        },
+        "west": {
+          "north": [
+            0,
+            0,
+            0,
+            3,
+            16,
+            8
+          ],
+          "south": [
+            0,
+            0,
+            8,
+            3,
+            16,
+            16
+          ],
+          "west": [
+            0,
+            0,
+            0,
+            3,
+            8,
+            16
+          ],
+          "east": [
+            0,
+            8,
+            0,
+            3,
+            16,
+            16
+          ]
+        },
+        "east": {
+          "north": [
+            13,
+            0,
+            0,
+            16,
+            16,
+            8
+          ],
+          "south": [
+            13,
+            0,
+            8,
+            16,
+            16,
+            16
+          ],
+          "west": [
+            13,
+            0,
+            0,
+            16,
+            8,
+            16
+          ],
+          "east": [
+            13,
+            8,
+            0,
+            16,
+            16,
+            16
+          ]
+        }
+      }
+    },
+    "create:copycat_panel": {
+      "be": "create:copycat",
+      "defaults": {
+        "facing": "up",
+        "waterlogged": "false"
+      },
+      "properties": {
+        "facing": [
+          "down",
+          "up",
+          "north",
+          "south",
+          "west",
+          "east"
+        ],
+        "waterlogged": [
+          "false",
+          "true"
+        ]
+      },
+      "facing_convention": "Outward direction; thickness 3/16 on opposite boundary (UP is bottom).",
+      "item_requirement": "One copycat_panel item plus one material item",
+      "boxes": {
+        "down": [
+          0,
+          13,
+          0,
+          16,
+          16,
+          16
+        ],
+        "up": [
+          0,
+          0,
+          0,
+          16,
+          3,
+          16
+        ],
+        "north": [
+          0,
+          0,
+          13,
+          16,
+          16,
+          16
+        ],
+        "south": [
+          0,
+          0,
+          0,
+          16,
+          16,
+          3
+        ],
+        "west": [
+          13,
+          0,
+          0,
+          16,
+          16,
+          16
+        ],
+        "east": [
+          0,
+          0,
+          0,
+          3,
+          16,
+          16
+        ]
+      }
+    },
+    "create:copycat_step": {
+      "be": "create:copycat",
+      "defaults": {
+        "facing": "south",
+        "half": "bottom",
+        "waterlogged": "false"
+      },
+      "properties": {
+        "facing": [
+          "north",
+          "south",
+          "west",
+          "east"
+        ],
+        "half": [
+          "bottom",
+          "top"
+        ],
+        "waterlogged": [
+          "false",
+          "true"
+        ]
+      },
+      "facing_convention": "Occupied horizontal half matches facing; half controls occupied vertical half. Dimensions 16x8x8 in SOUTH orientation.",
+      "item_requirement": "One copycat_step item plus one material item",
+      "boxes_by_facing_and_half": {
+        "north": {
+          "bottom": [
+            0,
+            0,
+            0,
+            16,
+            8,
+            8
+          ],
+          "top": [
+            0,
+            8,
+            0,
+            16,
+            16,
+            8
+          ]
+        },
+        "south": {
+          "bottom": [
+            0,
+            0,
+            8,
+            16,
+            8,
+            16
+          ],
+          "top": [
+            0,
+            8,
+            8,
+            16,
+            16,
+            16
+          ]
+        },
+        "west": {
+          "bottom": [
+            0,
+            0,
+            0,
+            8,
+            8,
+            16
+          ],
+          "top": [
+            0,
+            8,
+            0,
+            8,
+            16,
+            16
+          ]
+        },
+        "east": {
+          "bottom": [
+            8,
+            0,
+            0,
+            16,
+            8,
+            16
+          ],
+          "top": [
+            8,
+            8,
+            0,
+            16,
+            16,
+            16
+          ]
+        }
+      }
+    }
+  },
+  "unsupported": {
+    "copycat_wing": "No wing block class, registered ID, or translation in pinned Copycats+ 3.0.4 common/neoforge/fabric sources or generated en_us assets. Do not invent an ID. Wing-shaped builds can use confirmed panel/layer/byte geometry."
+  }
+}

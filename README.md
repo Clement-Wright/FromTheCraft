@@ -8,7 +8,7 @@ FromTheCraft runs locally on Windows. It converts hulls, decks and building mate
 
 ## Download and run
 
-1. Open the [latest Windows release](https://github.com/Clement-Wright/FromTheCraft/releases/latest) and download the Windows ZIP under Assets. The current release is [v0.3.0](https://github.com/Clement-Wright/FromTheCraft/releases/tag/v0.3.0).
+1. Open the [latest Windows release](https://github.com/Clement-Wright/FromTheCraft/releases/latest) and download the Windows ZIP under Assets.
 2. Extract the entire ZIP to a folder.
 3. Open `FromTheCraft.exe` in the extracted folder.
 
@@ -34,17 +34,25 @@ Leave **Installed mods** at **Vanilla only** for vanilla building blocks. If a s
 
 For modded output, open **Installed mods** and check the mods in your pack. The profile targets **Minecraft 1.21.1, NeoForge and Create 6.0.10**. It includes Copycats+, Design n' Decor, Create: Chipped, Encased, Deco, Chipped, and Bells & Whistles. Dependencies are selected automatically. FromTheCraft doesn't install mods.
 
-**Create: Copycats+** preserves partial-block shapes with the selected material applied to copycat stairs and slabs. Their NBT includes the material state and consumed item. The other enabled palettes offer 63 solid blocks across Create and its add-ons, plus verified matching shape variants. The converter uses them when they match the source color more closely.
+The palette contains **798 measured full blocks and 375 matching slab/stair variants**: 228 vanilla full blocks and 570 across Create and its add-ons. It includes varied stone, wood, concrete, terracotta, wool, metal and static casings. Material first keeps the source material family. Balanced preserves wood and favors other matching material families; Color first chooses the closest measured color.
 
-The inspector and build list show each copycat's **Applied material**, with separate searchable rows for different materials. Counts describe exported blocks, not survival crafting costs. Previews use flat colors; Minecraft supplies textures from your installed mods and resource packs. See [mod versions and format checks](docs/mod-compatibility.md) for the exact profiles and unverified in-game behavior.
+**Create: Copycats+** applies the selected material to copycat stairs and slabs. Enable **Detailed Copycats** for finer sampled shapes using eighth-block layers, panels, half panels, byte-panel quadrants, half-block byte octants, independently adjustable half layers, slices, boards, beams and vertical steps. It requires Copycats+ and Minecraft output, and is off by default. The pinned profile has no verified Copycat Wing block.
+
+The inspector and build list show each copycat's **Applied material**, with separate searchable rows for different materials. Counts describe exported blocks, not survival crafting costs. The exported NBT includes the applied material state and the inspected consumed-item fields. See [mod versions and format checks](docs/mod-compatibility.md) for the exact profiles and unverified in-game behavior.
+
+### Preview textures
+
+Enable **Display textures** to use locally available texture assets in both views. Use **Load textures** to open a Minecraft 1.21.1 client JAR, mod JAR or resource-pack ZIP. Files stay in the current local session. Discovery checks `%APPDATA%\.minecraft` and the default FtD install. Set `FROMTHECRAFT_MINECRAFT` or `FROMTHECRAFT_FTD` for another installation. The texture-status panel shows what is available; missing faces keep their flat colors.
+
+The texture toggle changes only the display. It does not change the selected materials or exported file. Previews use simplified structural geometry and do not reproduce game lighting, connected textures or custom shaders. When FtD is installed, the viewer reads supported structural base-color textures from its loose files or embedded Unity Resources. Glass and any missing textures keep their simplified appearance. FromTheCraft includes no game or mod texture assets.
 
 ## How conversion works
 
-The source preview uses native structural primitives independently of the target grid. FtD beams occupy their full footprints, and nested child transforms compose continuously before the converter samples the geometry at the selected scale. The first occupied contribution wins when parts overlap.
+The source preview uses native structural primitives independently of the target grid. FtD beams occupy their full footprints, and nested child transforms compose continuously before the converter samples the geometry at the selected scale. Overlapping geometry contributes to the same cell's sampled shape; the first occupied contributor supplies its material.
 
 After sampling, the converter assigns building materials and writes the target format. It reads those exact bytes back to make the converted preview and caches them for export.
 
-Native FtD slopes, wedges and corners use distinct convex shape definitions. Their local direction comes from checks against installed game meshes. the source viewer and converter share those definitions. Axis-aligned Minecraft output uses matching stairs and slabs, matching full blocks, or enabled copycats. Minecraft stairs become ordinary FtD slopes at 1×. Half slabs become 1 m blocks at that scale, while 2× preserves their half-height geometry. FtD paint uses RGB blended by its saved paint-strength channel. Glass transparency follows the material class. Previews use flat colors and simplified geometry instead of game textures.
+Native FtD slopes, wedges and corners use distinct convex shape definitions. Their local direction comes from checks against installed game meshes. The source viewer and converter share those definitions. Axis-aligned Minecraft output uses matching stairs and slabs, matching full blocks, or enabled copycats. Minecraft stairs become ordinary FtD slopes at 1×. Half slabs become 1 m blocks at that scale, while 2× preserves their half-height geometry. FtD paint uses RGB blended by its saved paint-strength channel. Glass transparency follows the material class.
 
 ## Conversion limits
 
@@ -54,7 +62,7 @@ Minecraft input must have data version **3955**, for **Java 1.21.1**. Other vers
 
 FtD output follows the inspected **3.8.5.11** blueprint schema, also checked against installed blueprint schemas saved by 4.2.5.2 and 4.3.1.11. The bundled MIT catalog is a fallback, with versioned native-shape corrections for ambiguous IDs. When available, FromTheCraft reads the installed game's `Core_*` item metadata and inherited beam footprints locally. This was checked against **4.3.4.0 build 1**, including stock blueprints. Set `FROMTHECRAFT_FTD` to the game folder or `StreamingAssets` folder for another installation. The older bundled catalog omits some newer IDs when the game isn't installed. The app reports those omissions. No game files are copied or bundled. Ordinary curved-hull shapes and thin plate slopes still use limited approximations. FtD version compatibility and in-game acceptance need further checks.
 
-Limits are 32 MiB per uploaded file, 128 MiB decompressed NBT, 500,000 occupied output cells, 2,048 cells per axis, and an 8,000,000-cell bounding volume.
+Structure uploads are limited to 32 MiB. Texture ZIP/JAR imports have a separate 128 MiB total archive budget per session, with 512 MiB declared expanded data and 2,048-pixel image limits. Other limits are 128 MiB decompressed NBT, 500,000 occupied output cells, 2,048 cells per axis, and an 8,000,000-cell bounding volume.
 
 ## Development
 
@@ -85,4 +93,4 @@ powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1
 
 ## License and acknowledgments
 
-GPL-3.0-or-later. See [COPYING](COPYING). Litemapy 0.11.0b0 is GPL-3.0 and supplies the Litematic adapter. nbtlib 2.0.4 handles binary NBT. Three.js 0.180.0 provides instancing and orbit controls. React supplies the interface. The [FtD-Blueprint-Bot catalog](https://github.com/FRUCHTBA3R/FtD-Blueprint-Bot/tree/a7c162bec615f277fa1eeecdbaf9d4680d5ac2e4) is reused under MIT with its notice. The Minecraft registry comes from [minecraft-data 3.100.0](https://github.com/PrismarineJS/minecraft-data), also MIT. Full dependency notices ship inside the portable folder. No game assets or third-party blueprints are bundled.
+GPL-3.0-or-later. See [COPYING](COPYING). Litemapy 0.11.0b0 is GPL-3.0 and supplies the Litematic adapter. nbtlib 2.0.4 handles binary NBT. UnityPy 1.25.3 (MIT) reads selected local Unity texture ranges. Three.js 0.180.0 provides instancing and orbit controls. React supplies the interface. The [FtD-Blueprint-Bot catalog](https://github.com/FRUCHTBA3R/FtD-Blueprint-Bot/tree/a7c162bec615f277fa1eeecdbaf9d4680d5ac2e4) is reused under MIT with its notice. The Minecraft registry comes from [minecraft-data 3.100.0](https://github.com/PrismarineJS/minecraft-data), also MIT. Full dependency notices ship inside the portable folder. No game assets or third-party blueprints are bundled.

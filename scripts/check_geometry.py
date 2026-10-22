@@ -82,6 +82,85 @@ def serialized_boxes(state, contract):
     if state is None:
         return []
     name, props = state["name"], state["properties"]
+    family = name.removeprefix("copycats:copycat_")
+    extras = {
+        "half_layer",
+        "vertical_half_layer",
+        "stacked_half_layer",
+        "beam",
+        "board",
+        "vertical_step",
+        "slice",
+        "vertical_slice",
+        "corner_slice",
+    }
+    if name.startswith("copycats:") and family in extras:
+        # Independently interpreted CCShapes base boxes; rotate all eight corners.
+        raw = []
+        if family == "beam":
+            lo, hi = np.full(3, 0.25), np.full(3, 0.75)
+            axis = "xyz".index(props.get("axis", "y"))
+            lo[axis], hi[axis] = 0, 1
+            return [np.r_[lo, hi]]
+        if family == "board":
+            for direction, axis, positive in (
+                ("east", 0, True),
+                ("west", 0, False),
+                ("up", 1, True),
+                ("down", 1, False),
+                ("south", 2, True),
+                ("north", 2, False),
+            ):
+                if props.get(direction) == "true":
+                    box = np.array([0.0, 0.0, 0.0, 1.0, 1.0, 1.0])
+                    box[axis], box[axis + 3] = (15 / 16, 1) if positive else (0, 1 / 16)
+                    raw.append(box)
+            return raw
+        if family.endswith("half_layer"):
+            for positive, slot in ((False, "negative_layers"), (True, "positive_layers")):
+                h = int(props.get(slot, "0")) / 8
+                if not h:
+                    continue
+                if family == "half_layer":
+                    raw.append((0, 0, 0.5 if positive else 0, 1, h, 1 if positive else 0.5))
+                elif family == "vertical_half_layer":
+                    raw.append((0.5 if positive else 0, 0, 1 - h, 1 if positive else 0.5, 1, 1))
+                else:
+                    raw.append((0, 0.5 if positive else 0, 1 - h, 1, 1 if positive else 0.5, 1))
+        elif family == "vertical_step":
+            raw = [(0.5, 0, 0.5, 1, 1, 1)]
+        else:
+            h = int(props.get("layers", "1")) / 8
+            raw = [
+                (0, 0, 1 - h, 1, h, 1)
+                if family == "slice"
+                else (1 - h, 0, 1 - h, 1, 1, 1)
+                if family == "vertical_slice"
+                else (1 - h, 0, 1 - h, 1, h, 1)
+            ]
+        facing = (
+            ("east" if props.get("axis", "x") == "x" else "south")
+            if family == "half_layer"
+            else props.get("facing", "south")
+        )
+        result = []
+        for box in raw:
+            corners = list(product(*zip(box[:3], box[3:])))
+            transformed = []
+            for x, y, z in corners:
+                if props.get("half") == "top":
+                    y = 1 - y
+                transformed.append(
+                    {
+                        "south": (x, y, z),
+                        "north": (1 - x, y, 1 - z),
+                        "east": (z, y, 1 - x),
+                        "west": (1 - z, y, x),
+                    }[facing]
+                )
+            points = np.array(transformed)
+            result.append(np.r_[points.min(0), points.max(0)])
+        return result
     if name in contract["blocks"]:
         spec = contract["blocks"][name]
         props = {**spec["defaults"], **props}
@@ -202,7 +281,7 @@ def main():
     parser.add_argument(
         "--contract",
         type=Path,
-        default=Path("research/advanced-copycat-schema.json"),
+        default=Path("tests/fixtures/copycats-shapes.json"),
         help="Original source-inspected Copycats+ shape contract, not application code",
     )
     parser.add_argument("--output", type=Path, required=True)
