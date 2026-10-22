@@ -91,6 +91,20 @@ Independent 16³ volume samples around the three reported hover locations compar
 
 The frozen texture check caught an eager, unused UnityPy audio import. The package now loads the pinned texture converter directly and excludes the unused audio runtime. A standalone Windows check read the local FtD texture successfully. The real textured-ship browser test also checked local client-JAR textures, unchanged export hashes and both texture availability states. Batching image completion and uniform face materials reduced that software-rendered test from about 156 seconds to 21 seconds. These timings include conversion and test overhead, rather than measuring frame rate.
 
+## Hull coverage corrections in 0.4.1
+
+The 0.4.0 stratified grid missed 20 nonempty one-layer slice states entirely. A vertical slice could therefore win a fit as though it were air, then appear in the serialized preview as a tall thin post. Matching volume also allowed a partial shape to leave a visible hole in a continuous hull.
+
+Detailed Copycats now uses a uniform 16³ interior grid and 1,536 probes near cell faces. The interior points avoid the boundaries of 1/16-thick boards and resolve intersections of thin slices. The fitter retains occupied source samples before minimizing excess volume. Half-layer candidates include outward-rounded profiles, and bytes retain every touched octant. This can thicken an edge or use a full block where the available partial shapes cannot cover the sampled source. It does not promise an exact surface match.
+
+Inverse sampling streams bounded batches instead of allocating every part's sample mask at once. The original sampling point budget limits temporary arrays despite the denser detail grid. Ordinary conversion, material ownership, texture handling and the serialized-preview contract remain the same.
+
+Regression checks cover tiny slices, continuous slope coverage in all 24 rotations and both Minecraft formats, triangular tips, square corners, offset transitions and disconnected corner details. The separate-corner test also checks that an empty octant stays empty. The independent geometry checker now reports uncovered projected rays alongside volume differences, using near-face probes and separately interpreted serialized target boxes. Projection checks alone are insufficient: thin boards can cover three orthographic views while leaving gaps from other angles.
+
+The Python suite passed **525 tests**. The packaged Windows application passed **23 browser tests**, including real textured-ship conversion, export hashes, hollowing, both Minecraft formats and the 204,146-primitive basic Claymore preview. All 13 harder owner blueprints completed detailed conversion to both formats, peaking at 615.1 MiB in this concurrent development run. Independent JavaScript checks parsed all **26 exports** and compared every Litematic state and block entity with its NBT counterpart.
+
+Independent checks around ten reported locations on Aegis, Cygnus, Claymore and Ragnarok found no missing source samples on a 16³ interior grid and no uncovered sampled projection rays with near-face probes. The 0.4.0 exports left 3.3–27.4% of those source rays uncovered. Added volume in the new results spans about 1.3–11.6% of the sampled 3×3×3-cell neighborhoods; closing gaps increases volume error in these cases. These are local sampled measurements, not whole-craft or in-game guarantees.
+
 ## Unverified behavior
 
 No exported file has been loaded in Minecraft/Create, Litematica or FtD during this build. Schema and independent-reader checks do not establish game acceptance. Ordinary curved-hull families lack a verified real fixture; thin plate slopes currently use reported footprint approximations. Real nested ships in this set use right-angle child rotations, while non-right-angle pivot evidence comes from the asymmetric mathematical fixture. Cross-game conversion is lossy; catalog policies do not promise exact appearances.

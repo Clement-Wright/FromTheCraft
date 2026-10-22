@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fromthecraft"
-version = "0.4.0"
+version = "0.4.1"
 description = "Local structural conversion between From the Depths and Minecraft"
 license = "GPL-3.0-or-later"
 requires-python = ">=3.12"

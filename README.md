@@ -38,6 +38,8 @@ The palette contains **798 measured full blocks and 375 matching slab/stair vari
 
 **Create: Copycats+** applies the selected material to copycat stairs and slabs. Enable **Detailed Copycats** for finer sampled shapes using eighth-block layers, panels, half panels, byte-panel quadrants, half-block byte octants, independently adjustable half layers, slices, boards, beams and vertical steps. It requires Copycats+ and Minecraft output, and is off by default. The pinned profile has no verified Copycat Wing block.
 
+Detailed Copycats rounds partial shapes outward to retain the sampled hull, including thin slope tips. This avoids holes caused by choosing a smaller piece with a similar volume. Some edges become thicker at Minecraft's block resolution; the result remains an approximation.
+
 The inspector and build list show each copycat's **Applied material**, with separate searchable rows for different materials. Counts describe exported blocks, not survival crafting costs. The exported NBT includes the applied material state and the inspected consumed-item fields. See [mod versions and format checks](docs/mod-compatibility.md) for the exact profiles and unverified in-game behavior.
 
 ### Preview textures
