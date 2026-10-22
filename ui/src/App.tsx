@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import PairedViewer from "./viewer/PairedViewer";
 import Materials from "./Materials";
 import ModPicker from "./ModPicker";
-import type { Display, ModChoice, Status } from "./types";
+import type { Display, ModChoice, Status, TextureStatus } from "./types";
 
 const labels: Record<string, string> = {
   empty: "Open a file to begin.",
@@ -29,6 +29,12 @@ export default function App() {
   const [preference, setPreference] = useState("balanced");
   const [modChoices, setModChoices] = useState<ModChoice[]>([]);
   const [mods, setMods] = useState<string[]>([]);
+  const [detailedCopycats, setDetailedCopycats] = useState(false);
+  const [displayTextures, setDisplayTextures] = useState(false);
+  const [textureStatus, setTextureStatus] = useState<TextureStatus>();
+  const [textureLoading, setTextureLoading] = useState(false);
+  const [textureError, setTextureError] = useState("");
+  const textureInput = useRef<HTMLInputElement>(null);
   const [hollow, setHollow] = useState(false);
   const [shellThickness, setShellThickness] = useState(1);
   const [sourceNotices, setSourceNotices] = useState<Record<string, number>>(
@@ -55,6 +61,7 @@ export default function App() {
         token.current = session.token;
         setCanClose(session.can_close);
         setModChoices(session.mod_choices ?? []);
+        setTextureStatus(session.textures);
         setCatalog(
           `FtD catalog: ${session.ftd_catalog ?? "bundled reference"}`,
         );
@@ -135,6 +142,37 @@ export default function App() {
     }
   }
 
+  async function importTextures(file?: File) {
+    if (!file || !initialized) return;
+    setTextureLoading(true);
+    setTextureError("");
+    const current = generation.current;
+    const body = new FormData();
+    body.append("file", file);
+    try {
+      const refreshed = await mutate(() =>
+        request(
+          `/api/textures?token=${encodeURIComponent(token.current)}`,
+          body,
+        ),
+      );
+      setTextureStatus(refreshed.textures);
+      if (current === generation.current) {
+        setSource(refreshed.source ?? undefined);
+        sourceRef.current = refreshed.source ?? undefined;
+        setStatus((previous) => ({
+          ...previous,
+          converted: refreshed.converted ?? undefined,
+        }));
+      }
+      setDisplayTextures(true);
+    } catch (error) {
+      setTextureError((error as Error).message);
+    } finally {
+      setTextureLoading(false);
+    }
+  }
+
   function invalidate() {
     if (!sourceRef.current) return;
     ++generation.current;
@@ -156,6 +194,10 @@ export default function App() {
             scale,
             preference,
             mods: format === "blueprint" ? [] : mods,
+            detailed_copycats:
+              format !== "blueprint" &&
+              mods.includes("copycats") &&
+              detailedCopycats,
             hollow,
             shell_thickness: shellThickness,
           }),
@@ -375,6 +417,22 @@ export default function App() {
                 invalidate();
               }}
             />
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={detailedCopycats}
+                disabled={format === "blueprint" || !mods.includes("copycats")}
+                onChange={(event) => {
+                  setDetailedCopycats(event.target.checked);
+                  invalidate();
+                }}
+              />
+              Detailed Copycats
+            </label>
+            <p className="hint">
+              Use small Copycats pieces to retain finer structural detail.
+              Requires Copycats in the output mod list.
+            </p>
             <label className="check hollow-option">
               <input
                 type="checkbox"
@@ -490,6 +548,31 @@ export default function App() {
                 </button>
               ))}
             </div>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={displayTextures}
+                onChange={(event) => setDisplayTextures(event.target.checked)}
+              />
+              Display textures
+            </label>
+            <input
+              hidden
+              ref={textureInput}
+              type="file"
+              accept=".zip,.jar"
+              aria-label="Load texture archive"
+              onChange={(event) => {
+                void importTextures(event.target.files?.[0]);
+                event.target.value = "";
+              }}
+            />
+            <button
+              disabled={!initialized || textureLoading || busy}
+              onClick={() => textureInput.current?.click()}
+            >
+              {textureLoading ? "Loading textures…" : "Load textures"}
+            </button>
             <span className="scale-label">Output {scale}×</span>
           </div>
           <PairedViewer
@@ -498,16 +581,37 @@ export default function App() {
             linked={linked}
             view={view}
             reset={reset}
+            displayTextures={displayTextures}
+            textureToken={token.current}
           />
           <div className="preview-context">
             <span>
-              Structural previews use simplified shapes and flat colors.
-              Minecraft uses your installed textures.
+              Structural previews use simplified shapes. Missing textures use
+              flat colors.
             </span>
             <span>
               Orbit: drag / Pan: right-drag / Zoom: scroll / Inspect: hover or I
             </span>
           </div>
+          <details className="texture-status">
+            <summary>
+              Texture assets: Minecraft{" "}
+              {textureStatus?.minecraft.available ? "available" : "unavailable"}
+              ; FtD {textureStatus?.ftd.available ? "available" : "unavailable"}
+            </summary>
+            <p>
+              Load a local Minecraft client JAR, mod JAR or resource-pack ZIP.
+              Assets stay in this local session.
+            </p>
+            {textureStatus?.reasons?.map((reason) => (
+              <p key={reason}>{reason}</p>
+            ))}
+          </details>
+          {textureError && (
+            <p className="texture-error" role="alert">
+              {textureError}
+            </p>
+          )}
           {Object.keys(sourceNotices).length > 0 && (
             <p className="source-notice">
               Source preview omits or approximates some details. See notices

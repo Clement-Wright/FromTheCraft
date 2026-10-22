@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import type { Display } from "./types";
-import { blockStateText } from "./blockState";
+import { blockStateText, copiedMaterialsText } from "./blockState";
 
 export default function Materials({
   source,
@@ -30,7 +30,7 @@ export default function Materials({
   const total = materials.reduce((sum, item) => sum + item.count, 0);
   const query = search.trim().toLowerCase();
   const filtered = materials.filter((item) =>
-    `${blockStateText(item)} ${item.material} ${item.copied_material ? blockStateText(item.copied_material) : ""}`
+    `${blockStateText(item)} ${item.material} ${item.copied_material ? blockStateText(item.copied_material) : ""} ${item.copied_materials ? copiedMaterialsText(item.copied_materials) : ""}`
       .toLowerCase()
       .includes(query),
   );
@@ -116,7 +116,7 @@ export default function Materials({
               <tbody>
                 {filtered.map((item) => (
                   <tr
-                    key={`${item.name}:${item.material}:${JSON.stringify(item.properties)}:${JSON.stringify(item.copied_material)}`}
+                    key={`${item.name}:${item.material}:${JSON.stringify(item.properties)}:${JSON.stringify(item.copied_material)}:${JSON.stringify(item.copied_materials)}`}
                   >
                     <td>
                       <strong>{item.name}</strong>
@@ -130,6 +130,12 @@ export default function Materials({
                         <span className="applied-material">
                           Applied material:{" "}
                           {blockStateText(item.copied_material)}
+                        </span>
+                      )}
+                      {Boolean(item.copied_materials?.length) && (
+                        <span className="applied-material">
+                          Applied materials:{" "}
+                          {copiedMaterialsText(item.copied_materials!)}
                         </span>
                       )}
                     </td>

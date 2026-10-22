@@ -416,6 +416,28 @@ h2 {
   color: #87511d;
   font-size: 11px;
 }
+.texture-status {
+  padding: 0 18px 8px;
+  color: #637363;
+  font-size: 11px;
+  max-height: 120px;
+  overflow: auto;
+  flex-shrink: 0;
+}
+.texture-status summary {
+  cursor: pointer;
+  min-height: 40px;
+  align-content: center;
+}
+.texture-status p {
+  margin-bottom: 5px;
+  overflow-wrap: anywhere;
+}
+.texture-error {
+  color: #9b392c;
+  font-size: 12px;
+  padding: 0 18px 8px;
+}
 .status-area {
   border-top: 1px solid #cbd2ca;
   background: #fbfcf9;

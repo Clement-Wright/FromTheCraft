@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import * as T from "three";
-import { blockStateText } from "../blockState";
+import { blockStateText, copiedMaterialsText } from "../blockState";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { ConvexGeometry } from "three/addons/geometries/ConvexGeometry.js";
 import type { Display } from "../types";
 import { BlockPicker, type HoveredBlock } from "./BlockPicker";
+import { surfaceGeometry, textureBatches } from "./TextureSurfaces";
 
 function boxes(pieces: [number[], number[]][]) {
   const positions: number[] = [];
@@ -140,6 +141,8 @@ type Props = {
   linked: boolean;
   view: string;
   reset: number;
+  displayTextures?: boolean;
+  textureToken?: string;
 };
 
 export default function PairedViewer({
@@ -148,6 +151,8 @@ export default function PairedViewer({
   linked,
   view,
   reset,
+  displayTextures = false,
+  textureToken = "",
 }: Props) {
   const hosts = [useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null)];
   const views = useRef<View[]>([]);
@@ -201,6 +206,85 @@ export default function PairedViewer({
         controls.listenToKeyEvents(renderer.domElement);
         const resources: { dispose: () => void }[] = [];
         const picker = new BlockPicker(models[index]);
+        let disposed = false;
+        const textures = new Map<string, T.Texture>();
+        const imageLoader = new T.ImageLoader();
+        const textureQueue: { key: string; texture: T.Texture }[] = [];
+        let activeImages = 0;
+        let textureBytes = 0;
+        const unavailableTexture = (key: string, message: string) => {
+          if (disposed) return;
+          scene.traverse((object) => {
+            if (!(object instanceof T.Mesh)) return;
+            const surfaces = Array.isArray(object.material)
+              ? object.material
+              : [object.material];
+            for (const surface of surfaces) {
+              if (
+                surface instanceof T.MeshStandardMaterial &&
+                surface.map === textures.get(key)
+              ) {
+                surface.map = null;
+                surface.needsUpdate = true;
+              }
+            }
+          });
+          setError(message);
+        };
+        const loadImages = () => {
+          while (!disposed && activeImages < 4 && textureQueue.length) {
+            const { key, texture } = textureQueue.shift()!;
+            activeImages++;
+            imageLoader.load(
+              `/api/textures/${encodeURIComponent(key)}?token=${encodeURIComponent(textureToken)}`,
+              (image) => {
+                activeImages--;
+                const bytes = (image.width * image.height * 4 * 4) / 3;
+                if (
+                  !disposed &&
+                  textureBytes + bytes <= 64 * 1024 * 1024 &&
+                  image.width <= 2048 &&
+                  image.height <= 2048
+                ) {
+                  textureBytes += bytes;
+                  texture.image = image;
+                  texture.needsUpdate = true;
+                  scene.traverse((object) => {
+                    if (!(object instanceof T.Mesh)) return;
+                    const surfaces = Array.isArray(object.material)
+                      ? object.material
+                      : [object.material];
+                    for (const surface of surfaces) {
+                      if (
+                        surface instanceof T.MeshStandardMaterial &&
+                        surface.userData.previewTexture === texture
+                      ) {
+                        surface.map = texture;
+                        surface.needsUpdate = true;
+                      }
+                    }
+                  });
+                } else
+                  unavailableTexture(
+                    key,
+                    "Texture memory limit reached. Remaining surfaces use flat colors.",
+                  );
+                loadImages();
+              },
+              undefined,
+              () => {
+                activeImages--;
+                unavailableTexture(
+                  key,
+                  "Some texture images could not load. Reload the texture archive to retry.",
+                );
+                loadImages();
+              },
+            );
+          }
+          if (!disposed && activeImages === 0 && textureQueue.length === 0)
+            renderer.render(scene, camera);
+        };
         for (const group of models[index]?.groups ?? []) {
           const geometry = group.vertices
             ? new ConvexGeometry(
@@ -217,37 +301,89 @@ export default function PairedViewer({
                 ),
               )
             : shapeGeometry(group.shape);
-          const material = new T.MeshStandardMaterial({
+          const settings = {
             roughness: 0.84,
             metalness: 0.02,
             transparent: group.transparent,
             opacity: group.transparent ? 0.48 : 1,
             depthWrite: !group.transparent,
             side: T.DoubleSide,
-          });
-          const mesh = new T.InstancedMesh(
-            geometry,
-            material,
-            group.colors.length / 3,
-          );
-          const matrix = new T.Matrix4();
-          const color = new T.Color();
-          for (let i = 0; i < mesh.count; i++) {
-            matrix.fromArray(group.matrices, i * 16);
-            mesh.setMatrixAt(i, matrix);
-            color.setRGB(
-              group.colors[i * 3],
-              group.colors[i * 3 + 1],
-              group.colors[i * 3 + 2],
-              T.SRGBColorSpace,
+          };
+          const texturedGeometry = displayTextures
+            ? surfaceGeometry(geometry)
+            : geometry;
+          resources.push(geometry);
+          if (texturedGeometry !== geometry) resources.push(texturedGeometry);
+          for (const batch of textureBatches(
+            group,
+            models[index]?.blocks ?? [],
+            displayTextures,
+          )) {
+            const uniformTexture =
+              batch.textures.length > 0 &&
+              batch.textures.every((key) => key === batch.textures[0]);
+            const surfaceKeys = uniformTexture
+              ? batch.textures.slice(0, 1)
+              : batch.textures;
+            const materials = surfaceKeys.length
+              ? surfaceKeys.map((key) => {
+                  let texture = key ? textures.get(key) : undefined;
+                  if (key && !texture) {
+                    texture = new T.Texture();
+                    textureQueue.push({ key, texture });
+                    texture.colorSpace = T.SRGBColorSpace;
+                    texture.magFilter = T.NearestFilter;
+                    texture.minFilter = T.NearestMipmapNearestFilter;
+                    texture.wrapS = texture.wrapT = T.RepeatWrapping;
+                    textures.set(key, texture);
+                    resources.push(texture);
+                  }
+                  const material = new T.MeshStandardMaterial({
+                    ...settings,
+                    map: null,
+                  });
+                  material.userData.previewTexture = texture;
+                  if (texture && models[index]?.format !== "blueprint") {
+                    // Minecraft PNGs already contain their surface colors; flat fallback
+                    // faces still use the instance color, while FtD keeps its paint tint.
+                    material.onBeforeCompile = (shader) => {
+                      shader.fragmentShader = shader.fragmentShader.replace(
+                        "#include <color_fragment>",
+                        "#ifndef USE_MAP\n#include <color_fragment>\n#endif",
+                      );
+                    };
+                  }
+                  return material;
+                })
+              : [new T.MeshStandardMaterial(settings)];
+            const mesh = new T.InstancedMesh(
+              texturedGeometry,
+              materials.length === 1 ? materials[0] : materials,
+              batch.instances.length,
             );
-            mesh.setColorAt(i, color);
+            const matrix = new T.Matrix4();
+            const color = new T.Color();
+            for (let i = 0; i < mesh.count; i++) {
+              const originalInstance = batch.instances[i];
+              matrix.fromArray(group.matrices, originalInstance * 16);
+              mesh.setMatrixAt(i, matrix);
+              color.setRGB(
+                group.colors[originalInstance * 3],
+                group.colors[originalInstance * 3 + 1],
+                group.colors[originalInstance * 3 + 2],
+                T.SRGBColorSpace,
+              );
+              mesh.setColorAt(i, color);
+            }
+            mesh.instanceMatrix.needsUpdate = true;
+            mesh.computeBoundingSphere();
+            scene.add(mesh);
+            picker.add(
+              mesh,
+              batch.instances.map((instance) => group.block_indices[instance]),
+            );
+            resources.push(mesh, ...materials);
           }
-          mesh.instanceMatrix.needsUpdate = true;
-          mesh.computeBoundingSphere();
-          scene.add(mesh);
-          picker.add(mesh, group.block_indices ?? []);
-          resources.push(mesh, geometry, material);
         }
         const outline = new T.Box3Helper(new T.Box3(), 0x285f40);
         outline.visible = false;
@@ -419,7 +555,9 @@ export default function PairedViewer({
           render();
         });
         resize.observe(element);
+        loadImages();
         cleanup.push(() => {
+          disposed = true;
           window.cancelAnimationFrame(pendingPick);
           renderer.domElement.removeEventListener("pointermove", move);
           renderer.domElement.removeEventListener("pointerleave", clearHover);
@@ -443,7 +581,7 @@ export default function PairedViewer({
       for (const dispose of cleanup) dispose();
       views.current = [];
     };
-  }, [source, converted, view, reset]);
+  }, [source, converted, view, reset, displayTextures, textureToken]);
 
   useEffect(() => {
     if (linked && views.current.length === 2) {
@@ -496,6 +634,12 @@ export default function PairedViewer({
                 <span className="applied-material">
                   Applied material:{" "}
                   {blockStateText(hovered[index].copied_material)}
+                </span>
+              )}
+              {Boolean(hovered[index].copied_materials?.length) && (
+                <span className="applied-material">
+                  Applied materials:{" "}
+                  {copiedMaterialsText(hovered[index].copied_materials!)}
                 </span>
               )}
               <span className="block-coordinate">

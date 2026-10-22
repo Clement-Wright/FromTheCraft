@@ -9,3 +9,15 @@ export function blockStateText(state: {
       .join("")
   );
 }
+
+export function copiedMaterialsText(
+  materials: {
+    slot: string;
+    name: string;
+    properties: Record<string, string>;
+  }[],
+) {
+  return materials
+    .map((material) => `${material.slot}: ${blockStateText(material)}`)
+    .join("; ");
+}

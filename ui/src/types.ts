@@ -3,6 +3,27 @@ export type BlockIdentity = {
   material: string;
   properties: Record<string, string>;
   copied_material?: { name: string; properties: Record<string, string> };
+  copied_materials?: {
+    slot: string;
+    name: string;
+    properties: Record<string, string>;
+  }[];
+  textures?: Record<string, string>;
+};
+
+export type TextureStatus = {
+  available: boolean;
+  minecraft: {
+    available: boolean;
+    sources: { name: string; kind: string; assets: number }[];
+    reasons: string[];
+  };
+  ftd: {
+    available: boolean;
+    sources: { name: string; kind: string; assets: number }[];
+    reasons: string[];
+  };
+  reasons: string[];
 };
 
 export type ModChoice = {
