@@ -190,3 +190,13 @@ def test_all_vanilla_ids_have_honest_policy_and_rotations_are_proper():
     for i in range(24):
         assert np.linalg.det(rotation(i)) == 1
     assert all("SizeId" in entry or "Footprint" in entry for entry in CATALOG.values())
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_overlapping_half_parts_form_a_solid_cell_regardless_of_order(reverse):
+    lower = Part("lower", "box", (1, .5, 1), np.eye(4), "Metal", (.6, .1, .1))
+    transform = np.eye(4)
+    transform[1, 3] = .5
+    upper = Part("upper", "box", (1, .5, 1), transform, "Metal", (.6, .1, .1))
+    cells, _ = voxelize(Scene([upper, lower] if reverse else [lower, upper], "blueprint"))
+    assert cells[(0, 0, 0)].shape == "box"

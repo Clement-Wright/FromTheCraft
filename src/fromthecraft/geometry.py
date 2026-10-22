@@ -131,7 +131,7 @@ def cell_shape(mask):
 
 
 def voxelize(scene: Scene, scale=1, progress=None, cancelled=None):
-    cells = {}
+    cells, occupancy, fallback = {}, {}, {}
     low, high = bounds(scene, scale)
     origin = np.floor(low + 1e-6).astype(int)
     checked_size(np.maximum(1, np.ceil(high - 1e-6).astype(int) - origin))
@@ -161,10 +161,10 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None):
             masks = contains(part.shape, local).reshape(-1, 8)
         for position, mask in zip(candidates, masks):
             if mask.any():
-                shape = cell_shape(mask) if aligned else "box"
-                cells.setdefault(
-                    tuple(position - origin), replace(part, shape=shape) if shape != part.shape else part
-                )
+                key = tuple(position - origin)
+                bits = sum(1 << bit for bit in np.flatnonzero(mask))
+                occupancy[key] = occupancy.get(key, 0) | bits
+                cells.setdefault(key, part)
         # Forward sampling protects small features that fall between target sample centers.
         if not aligned or min(part.size) * scale < 0.5 or part.shape != "box":
             axes = [
@@ -184,18 +184,26 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None):
             octants = ((world_seeds - positions >= 0.5).astype(int) @ [4, 2, 1]).tolist()
             for position, octant in zip(positions, octants):
                 key = tuple(position - origin)
-                if key not in cells:
+                if key not in occupancy:
                     seed_masks[key] = seed_masks.get(key, 0) | (1 << octant)
             for position, mask in seed_masks.items():
-                occupied = np.asarray([bool(mask & (1 << bit)) for bit in range(8)])
-                shape = cell_shape(occupied) if aligned else "box"
-                cells[position] = replace(part, shape=shape)
+                previous, owner = fallback.get(position, (0, part))
+                fallback[position] = (previous | mask, owner)
         if len(cells) > MAX_PARTS:
             raise ValueError(
                 f"Output exceeds {MAX_PARTS:,} occupied cells; choose a smaller scale or structure"
             )
     if cancelled and cancelled():
         raise Cancelled("Conversion cancelled")
+    for position, (mask, part) in fallback.items():
+        if position not in occupancy:
+            occupancy[position], cells[position] = mask, part
+    if len(cells) > MAX_PARTS:
+        raise ValueError(f"Output exceeds {MAX_PARTS:,} occupied cells; choose a smaller scale or structure")
+    for position, part in cells.items():
+        mask = occupancy[position]
+        occupied = np.asarray([bool(mask & (1 << bit)) for bit in range(8)])
+        cells[position] = replace(part, shape=cell_shape(occupied))
     return cells, tuple(float(n) for n in origin)
 
 
