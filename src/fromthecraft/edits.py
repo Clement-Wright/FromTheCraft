@@ -86,6 +86,8 @@ class EditLayer:
             if policy == "all":
                 selected.update(children)
         clean = {"kind": kind, "ids": sorted(selected)}
+        if policy is not None:
+            clean["attachments"] = policy
         if kind == "mapping":
             mapping = command.get("mapping")
             if not isinstance(mapping, dict) or set(mapping) - {"name", "properties", "full_block"}:

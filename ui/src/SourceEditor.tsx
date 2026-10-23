@@ -41,7 +41,11 @@ export default function SourceEditor({
   const [query, setQuery] = useState("");
   const children = records.some((r) => r.host_id && selectedSet.has(r.host_id));
   return (
-    <section className="source-editor" aria-label="Conversion edits">
+    <section
+      id="conversion-edits"
+      className="source-editor"
+      aria-label="Conversion edits"
+    >
       <div className="editor-heading">
         <h2>Conversion edits</h2>
         <span data-testid="selection-count">

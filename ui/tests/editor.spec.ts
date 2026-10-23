@@ -1,6 +1,42 @@
 import { test, expect } from "@playwright/test";
 import path from "node:path";
 
+test("oversized original bounds do not prevent converting after exclusions", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: "Open file", exact: true }),
+  ).toBeEnabled();
+  const fs = await import("node:fs/promises");
+  const document = JSON.parse(
+    await fs.readFile("../tests/fixtures/asymmetric.blueprint", "utf8"),
+  );
+  const root = document.Blueprint;
+  root.BLP = ["0,0,0", "2100,0,0"];
+  root.BLR = [0, 0];
+  root.BCI = [0, 0];
+  root.BlockIds = [root.BlockIds[0], root.BlockIds[1]];
+  root.SCs = [];
+  await page.getByLabel("Open structure file").setInputFiles({
+    name: "outlier.blueprint",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(document)),
+  });
+  await expect(page.getByRole("status")).toContainText("Source ready");
+  await page
+    .getByRole("button", { name: /Select all .*beam/i })
+    .first()
+    .click();
+  await page
+    .getByRole("button", { name: "Exclude selected", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Convert", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("ready to export");
+  const result = await page.request.get("/api/status").then((r) => r.json());
+  expect(result.converted.count).toBe(1);
+});
+
 test("project roundtrip and target mapping preserve record selection", async ({
   page,
 }) => {
@@ -59,6 +95,10 @@ test("project roundtrip and target mapping preserve record selection", async ({
       (m: { name: string }) => m.name === "minecraft:gold_block",
     ),
   ).toBeTruthy();
+  await page.screenshot({
+    path: "../artifacts/feature-editor-controls.png",
+    fullPage: true,
+  });
 });
 
 test("source type exclusion and undo invalidate export while hiding does not", async ({

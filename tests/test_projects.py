@@ -7,6 +7,13 @@ from fromthecraft.edits import EditLayer
 from fromthecraft.projects import export_project, import_project
 
 
+def test_saved_project_limit_includes_metadata_and_view(monkeypatch):
+    monkeypatch.setattr("fromthecraft.projects.MAX_PROJECT_BYTES", 1024)
+    scene = read_file(Path("tests/fixtures/asymmetric.blueprint").read_bytes(), "blueprint")
+    with pytest.raises(ValueError, match="32 MiB"):
+        export_project(scene, EditLayer(scene), "source", {"format": "nbt"}, {"note": "x" * 1024})
+
+
 def test_project_roundtrip_cursor_and_source_hash_validation():
     scene = read_file(Path("tests/fixtures/asymmetric.blueprint").read_bytes(), "blueprint")
     edits = EditLayer(scene)

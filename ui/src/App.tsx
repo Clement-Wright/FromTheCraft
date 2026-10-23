@@ -379,30 +379,54 @@ export default function App() {
   const hiddenKey = (edits?.hidden ?? []).join("\n");
   const visibleSource = useMemo(() => {
     if (!source) return source;
-    const hidden = new Set(hiddenKey.split("\n"));
+    const hidden = new Set(hiddenKey ? hiddenKey.split("\n") : []);
     if (showDecorations)
       source.records?.forEach((r) => {
         if (r.hide_host && r.host_id && r.geometry_status !== "unresolved")
           hidden.add(r.host_id);
       });
+    const groups = source.groups
+      .filter((g) => showDecorations || !g.decoration)
+      .map((group) => {
+        const keep = group.block_indices
+          .map((_, i) => i)
+          .filter((i) => !hidden.has(group.source_ids?.[i] ?? ""));
+        return {
+          ...group,
+          matrices: keep.flatMap((i) =>
+            group.matrices.slice(i * 16, i * 16 + 16),
+          ),
+          colors: keep.flatMap((i) => group.colors.slice(i * 3, i * 3 + 3)),
+          block_indices: keep.map((i) => group.block_indices[i]),
+          source_ids: keep.map((i) => group.source_ids?.[i] ?? null),
+        };
+      });
+    const low = [Infinity, Infinity, Infinity],
+      high = [-Infinity, -Infinity, -Infinity];
+    let count = 0;
+    for (const group of groups)
+      for (let i = 0; i < group.matrices.length; i += 16) {
+        count++;
+        for (let axis = 0; axis < 3; axis++) {
+          let a = group.matrices[i + 12 + axis],
+            b = a;
+          for (let column = 0; column < 3; column++) {
+            const delta = group.matrices[i + column * 4 + axis];
+            a += Math.min(0, delta);
+            b += Math.max(0, delta);
+          }
+          low[axis] = Math.min(low[axis], a);
+          high[axis] = Math.max(high[axis], b);
+        }
+      }
     return {
       ...source,
-      groups: source.groups
-        .filter((g) => showDecorations || !g.decoration)
-        .map((group) => {
-          const keep = group.block_indices
-            .map((_, i) => i)
-            .filter((i) => !hidden.has(group.source_ids?.[i] ?? ""));
-          return {
-            ...group,
-            matrices: keep.flatMap((i) =>
-              group.matrices.slice(i * 16, i * 16 + 16),
-            ),
-            colors: keep.flatMap((i) => group.colors.slice(i * 3, i * 3 + 3)),
-            block_indices: keep.map((i) => group.block_indices[i]),
-            source_ids: keep.map((i) => group.source_ids?.[i] ?? null),
-          };
-        }),
+      groups,
+      count,
+      bounds: count ? ([low, high] as [number[], number[]]) : source.bounds,
+      dimensions: count
+        ? high.map((n, i) => Math.round((n - low[i]) * 1000) / 1000)
+        : source.dimensions,
     };
   }, [source, hiddenKey, showDecorations]);
 
@@ -543,7 +567,6 @@ export default function App() {
                 <option value="blueprint">FtD blueprint</option>
               )}
             </select>
-            <label htmlFor="scale">Output scale</label>
             {source?.format === "blueprint" && (
               <>
                 <label htmlFor="decorations">Decorative geometry</label>
@@ -593,6 +616,7 @@ export default function App() {
                 )}
               </>
             )}
+            <label htmlFor="scale">Output scale</label>
             <select
               id="scale"
               value={scale}
@@ -695,7 +719,9 @@ export default function App() {
             </div>
             {tooLarge && (
               <p className="warning">
-                This exceeds the size limit. Choose a smaller scale.
+                Original source bounds exceed the size estimate. Exclusions and
+                structure-only mode may reduce it; conversion checks the
+                remaining geometry.
               </p>
             )}
             {scale < 1 && (
@@ -725,7 +751,7 @@ export default function App() {
           <div className="settings-actions">
             <button
               className="primary convert"
-              disabled={!source || busy || editBusy || tooLarge}
+              disabled={!source || busy || editBusy}
               onClick={() => void run()}
             >
               Convert
@@ -797,6 +823,18 @@ export default function App() {
               {textureLoading ? "Loading textures…" : "Load textures"}
             </button>
             <span className="scale-label">Output {scale}×</span>
+            {source && (
+              <button
+                disabled={!selected.length}
+                onClick={() =>
+                  document
+                    .getElementById("conversion-edits")
+                    ?.scrollIntoView({ block: "center", behavior: "smooth" })
+                }
+              >
+                {selected.length.toLocaleString()} selected · Edit
+              </button>
+            )}
             {source?.format === "blueprint" && (
               <label className="check">
                 <input

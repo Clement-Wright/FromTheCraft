@@ -97,6 +97,11 @@ def test_nested_rotated_scaled_decoration_is_separate_from_host(monkeypatch):
         layer.apply({"kind": "exclude", "ids": [host]})
     layer.apply({"kind": "exclude", "ids": [host], "attachments": "host"})
     assert any(p.decoration for p in layer.derive(scene).parts)
+    from fromthecraft.projects import export_project, import_project
+
+    saved = export_project(scene, layer, "fixture", {"format": "nbt"}, {})
+    reopened, _, _ = import_project(saved, scene)
+    assert reopened.snapshot()["excluded"] == [host]
     combined = convert(scene, "nbt", decoration_mode="decorations")
     appearance = convert(scene, "nbt", decoration_mode="appearance")
     assert len(combined.scene.parts) > 2

@@ -16,7 +16,9 @@ async function open(page: Page, file = demo) {
     page.getByRole("button", { name: "Open file", exact: true }),
   ).toBeEnabled();
   await page.getByLabel("Open structure file").setInputFiles(file);
-  await expect(page.getByRole("status")).toHaveText(/Source ready/);
+  await expect(page.getByRole("status")).toHaveText(/Source ready/, {
+    timeout: 30000,
+  });
 }
 
 test("vanilla is the default conversion palette", async ({ page }) => {

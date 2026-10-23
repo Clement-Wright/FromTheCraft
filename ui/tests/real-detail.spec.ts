@@ -61,10 +61,24 @@ test("real detailed ship exports and displays local Minecraft and FtD textures",
   await expect(
     page.getByLabel("Display textures", { exact: true }),
   ).toBeChecked({ timeout: 30000 });
+  if (process.env.FROMTHECRAFT_TEXTURE_MOD_JAR) {
+    await expect(
+      page.getByRole("button", { name: "Load textures", exact: true }),
+    ).toBeEnabled({ timeout: 30000 });
+    await page
+      .getByLabel("Load texture archive")
+      .setInputFiles(process.env.FROMTHECRAFT_TEXTURE_MOD_JAR);
+    await expect(
+      page.getByRole("button", { name: "Load textures", exact: true }),
+    ).toBeEnabled({ timeout: 30000 });
+  }
   await expect(page.locator(".texture-status summary")).toContainText(
     "Minecraft available; FtD available",
   );
   const refreshed = await page.request.get("/api/status").then((r) => r.json());
+  if (process.env.FROMTHECRAFT_TEXTURE_MOD_JAR) {
+    expect(refreshed.converted.texture_coverage.missing_faces).toBe(0);
+  }
   console.log(
     "Textured block records",
     refreshed.converted.blocks.filter(

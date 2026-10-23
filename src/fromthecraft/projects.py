@@ -9,7 +9,7 @@ MAX_PROJECT_BYTES = 32 * 1024**2
 
 
 def export_project(scene, edits, filename, settings, view):
-    return {
+    document = {
         "schema": 1,
         "kind": "fromthecraft-project",
         "source": {"name": filename, "hash": scene.source_hash, "format": scene.format},
@@ -18,6 +18,9 @@ def export_project(scene, edits, filename, settings, view):
         "settings": settings,
         "view": view,
     }
+    if len(json.dumps(document, allow_nan=False).encode()) > MAX_PROJECT_BYTES:
+        raise ValueError("Project exceeds 32 MiB")
+    return document
 
 
 def import_project(document, scene):

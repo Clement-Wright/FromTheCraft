@@ -201,15 +201,9 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=Fals
                 for n in part.size
             ]
             seed_masks = {}
-            source_seeds = (
-                iter(
-                    np.clip(
-                        np.concatenate((part.mesh[0], part.mesh[0][part.mesh[1]].mean(1))), 1e-5, 1 - 1e-5
-                    )
-                )
-                if part.mesh
-                else product(*axes)
-            )
+            from .mesh_geometry import surface_seeds
+
+            source_seeds = surface_seeds(part, scale, cancelled) if part.mesh else product(*axes)
             while batch := list(islice(source_seeds, 4096)):
                 if cancelled and cancelled():
                     raise Cancelled("Conversion cancelled")

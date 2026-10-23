@@ -24,3 +24,27 @@ def test_duplicate_vertex_seams_still_form_closed_solids():
     faces = np.array([[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]])
     duplicated = vertices[faces].reshape(-1, 3)
     assert is_closed(duplicated, np.arange(12).reshape(-1, 3))
+
+
+def test_grid_aligned_open_sheet_covers_its_whole_plane_after_voxelization():
+    from fromthecraft.model import Part, Scene
+    from fromthecraft.mesh_geometry import prepare_meshes
+    from fromthecraft.geometry import voxelize
+
+    vertices = np.array([[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]], dtype=float)
+    transform = np.diag([10.0, 1.0, 10.0, 1.0])
+    part = Part(
+        "sheet",
+        "mesh",
+        (1, 1, 1),
+        transform,
+        "Metal",
+        (0.5, 0.5, 0.5),
+        mesh=(vertices, np.array([[0, 1, 2], [0, 2, 3]])),
+        decoration=True,
+    )
+    cells, offset = voxelize(prepare_meshes(Scene([part], "blueprint"), "decorations", 0.125, 1))
+    coverage = {(int(p[0] + offset[0]), int(p[2] + offset[2])) for p in cells}
+    assert {(x, z) for x in range(10) for z in range(10)} <= coverage
+    world_cells = {tuple(int(p[i] + offset[i]) for i in range(3)) for p in cells}
+    assert {(x, y, z) for x in range(10) for y in (-1, 0) for z in range(10)} <= world_cells

@@ -19,6 +19,35 @@ def is_closed(vertices, indices):
     return bool(np.all(counts == 2))
 
 
+def surface_seeds(part, scale, cancelled=None):
+    vertices, indices = part.mesh[:2]
+    emitted = 0
+    for triangle in vertices[indices]:
+        if cancelled and cancelled():
+            raise Cancelled("Conversion cancelled")
+        a, b, c = triangle
+        edges = np.array([b - a, c - a, c - b]) @ part.transform[:3, :3].T
+        divisions = max(1, int(np.ceil(np.linalg.norm(edges, axis=1).max() * scale * 4)))
+        offsets = [np.zeros(3)]
+        if not part.mesh[2]:
+            normal = np.cross(edges[0], edges[1])
+            length = np.linalg.norm(normal)
+            if length > 1e-12:
+                delta = np.linalg.solve(part.transform[:3, :3], normal / length * part.mesh[3] * 0.4999)
+                offsets.extend((delta, -delta))
+        count = (divisions + 1) * (divisions + 2) // 2 * len(offsets)
+        emitted += count
+        if emitted > 2_000_000:
+            raise ValueError("Decorative surface seed budget exceeded; choose a smaller scale")
+        for row in range(divisions + 1):
+            if cancelled and cancelled():
+                raise Cancelled("Conversion cancelled")
+            v = np.arange(divisions - row + 1) / divisions
+            points = a + (b - a) * (row / divisions) + v[:, None] * (c - a)
+            for delta in offsets:
+                yield from np.clip(points + delta, 1e-5, 1 - 1e-5)
+
+
 class MeshSampler:
     def __init__(self, vertices, indices, thickness=0.125, cancelled=None, closed=None):
         self.closed = is_closed(vertices, indices) if closed is None else closed

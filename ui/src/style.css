@@ -367,10 +367,10 @@ h2 {
   flex-shrink: 0;
 }
 .comparison > .paired-views {
-  min-height: 320px;
+  min-height: clamp(320px, calc(100dvh - 360px), 720px);
 }
 .comparison:has(.materials-toggle[aria-expanded="false"]) > .paired-views {
-  min-height: 65vh;
+  min-height: max(65vh, calc(100dvh - 300px));
 }
 .view-tools {
   min-height: 62px;
