@@ -1,6 +1,8 @@
 """Bounded triangle sampling: closed solids and deliberate thin surfaces."""
 
 from dataclasses import replace
+from functools import lru_cache
+from concurrent.futures import TimeoutError
 
 import numpy as np
 
@@ -15,6 +17,20 @@ except ImportError:
 # These bound cumulative work; temporary arrays remain batched independently.
 MAX_SURFACE_SEEDS = 200_000_000
 MAX_MESH_SAMPLE_WORK = 20_000_000_000
+
+
+@lru_cache(maxsize=64)
+def _seed_template(divisions, offset_count):
+    # Preserve row/offset/point order and the original divisions exactly. Only
+    # common, bounded templates are cached; large triangles keep the row path.
+    u, v, offsets = [], [], []
+    for row in range(divisions + 1):
+        along = np.arange(divisions - row + 1) / divisions
+        for offset in range(offset_count):
+            u.extend([row / divisions] * len(along))
+            v.extend(along)
+            offsets.extend([offset] * len(along))
+    return np.asarray(u), np.asarray(v), np.asarray(offsets, dtype=np.intp)
 
 
 def is_closed(vertices, indices):
@@ -49,6 +65,16 @@ def _surface_seed_rows(part, scale, cancelled=None):
         emitted += count
         if emitted > MAX_SURFACE_SEEDS:
             raise ValueError("Decorative surface seed budget exceeded; choose a smaller scale")
+        if divisions <= 128:
+            u, v, selected = _seed_template(divisions, len(offsets))
+            deltas = np.asarray(offsets)
+            for start in range(0, len(u), 4096):
+                if cancelled and cancelled():
+                    raise Cancelled("Conversion cancelled")
+                batch = slice(start, start + 4096)
+                points = a + (b - a) * u[batch, None] + v[batch, None] * (c - a)
+                yield np.clip(points + deltas[selected[batch]], 1e-5, 1 - 1e-5)
+            continue
         for row in range(divisions + 1):
             if cancelled and cancelled():
                 raise Cancelled("Conversion cancelled")
@@ -97,6 +123,35 @@ class MeshSampler:
         self.geometry = {}
         self.native_data = None
         self.native_leaves = {}
+        self.executor = None
+
+    def _native_query(self, points, arrays, closed):
+        if self.executor is None or len(points) < 8192 or (closed and len(self.triangles) < 48):
+            return _mesh_native.contains(points, *arrays, closed, self.radius)
+        step = (len(points) + 3) // 4
+        futures = [
+            self.executor.submit(
+                _mesh_native.contains, points[start : start + step], *arrays, closed, self.radius
+            )
+            for start in range(0, len(points), step)
+        ]
+        answers = []
+        for future in futures:
+            while True:
+                if self.cancelled and self.cancelled():
+                    raise Cancelled("Conversion cancelled")
+                try:
+                    answers.append(future.result(timeout=0.05))
+                    break
+                except TimeoutError:
+                    continue
+        # A numerical ambiguity in any slice repeats the COMPLETE original
+        # NumPy leaf batch, preserving its BLAS sizes and floating-point bits.
+        return (
+            b"".join(answer[0] for answer in answers),
+            sum(answer[1] for answer in answers),
+            any(answer[2] for answer in answers),
+        )
 
     def _native_arrays(self):
         if self.native_data is None:
@@ -131,8 +186,12 @@ class MeshSampler:
                         [a, ab, ac, normal, [norm2, aa, bb, cc, denominator]]
                         + [np.r_[start, direction, length] for start, direction, length in edges]
                     )
-            self.native_data = (coefficients, np.asarray(bounds), np.asarray(nodes, dtype=np.intp),
-                                np.asarray(indices, dtype=np.intp))
+            self.native_data = (
+                coefficients,
+                np.asarray(bounds),
+                np.asarray(nodes, dtype=np.intp),
+                np.asarray(indices, dtype=np.intp),
+            )
         return self.native_data
 
     def _triangle(self, index):
@@ -147,8 +206,10 @@ class MeshSampler:
                 norm2 = normal @ normal
                 aa, bb, cc = ab @ ab, ab @ ac, ac @ ac
                 denominator = aa * cc - bb * bb
-                edges = tuple((start, end - start, (end - start) @ (end - start))
-                              for start, end in ((a, b), (b, c), (c, a)))
+                edges = tuple(
+                    (start, end - start, (end - start) @ (end - start))
+                    for start, end in ((a, b), (b, c), (c, a))
+                )
                 data = (a, ab, ac, normal, norm2, aa, bb, cc, denominator, edges)
                 if norm2 < 1e-20 or denominator <= 1e-20:
                     data = None
@@ -204,8 +265,8 @@ class MeshSampler:
                         np.asarray([[-1, -1, 0, len(left)]], dtype=np.intp),
                         left,
                     )
-                occupied, _, uncertain = _mesh_native.contains(
-                    p, self._native_arrays()[0], *self.native_leaves[key], False, self.radius
+                occupied, _, uncertain = self._native_query(
+                    p, (self._native_arrays()[0], *self.native_leaves[key]), False
                 )
                 if not uncertain:
                     result[candidates] |= np.frombuffer(occupied, dtype=np.uint8)
@@ -243,10 +304,14 @@ class MeshSampler:
         for start in range(0, len(points), 32768):
             if self.cancelled and self.cancelled():
                 raise Cancelled("Conversion cancelled")
-            if (self.closed and _mesh_native is not None and points.dtype == np.float64
-                    and points.flags.c_contiguous):
-                occupied, work, uncertain = _mesh_native.contains(
-                    points[start : start + 32768], *self._native_arrays(), self.closed, self.radius
+            if (
+                self.closed
+                and _mesh_native is not None
+                and points.dtype == np.float64
+                and points.flags.c_contiguous
+            ):
+                occupied, work, uncertain = self._native_query(
+                    points[start : start + 32768], self._native_arrays(), self.closed
                 )
                 if not uncertain:
                     self.work += work

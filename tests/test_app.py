@@ -36,6 +36,33 @@ def finished(client):
     pytest.fail("Conversion did not finish")
 
 
+def test_extreme_detail_api_and_project_settings_roundtrip(client):
+    upload(client)
+    settings = {
+        "format": "nbt",
+        "mods": ["copycats"],
+        "extreme_detail": True,
+        "decoration_mode": "appearance",
+        "surface_thickness": 0.125,
+    }
+    response = client.post("/api/convert", json=settings)
+    assert response.status_code == 200
+    assert finished(client)["state"] == "ready"
+    saved = client.post("/api/project/save", json={"settings": settings}).json()
+    opened = client.post("/api/project/open", json=saved)
+    assert opened.status_code == 200
+    assert opened.json()["settings"]["extreme_detail"] is True
+    assert client.get("/api/export").status_code == 409
+    saved["settings"].pop("extreme_detail")
+    legacy = client.post("/api/project/open", json=saved)
+    assert legacy.status_code == 200
+    assert legacy.json()["settings"]["extreme_detail"] is False
+    # Old projects/presets omit the new option; its model default is off.
+    from fromthecraft.app import Options
+
+    assert Options(format="nbt").extreme_detail is False
+
+
 def test_edit_exclusion_invalidates_export_but_visibility_preserves_it(client):
     source = upload(client).json()["source"]
     record = source["records"][1]["id"]
@@ -304,6 +331,43 @@ def test_detailed_preview_and_export_stay_identical_after_loading_textures(clien
     assert client.get(f"/api/textures/{key}").status_code == 403
     assert client.get(f"/api/textures/{key}", params={"token": session.token}).content == raw
     assert client.get("/api/textures/missing", params={"token": session.token}).status_code == 404
+
+
+def test_texture_batch_keeps_archive_order_and_refreshes_previews_once(client, monkeypatch):
+    import fromthecraft.app as module
+    from test_textures import archive, cube, png
+
+    upload(client)
+    client.post("/api/convert", json={"format": "nbt"})
+    ready = finished(client)
+    before = client.get("/api/export", params={"result_id": ready["result_id"]}).content
+    real_preview, calls = module.preview, []
+
+    def tracked(*args, **kwargs):
+        calls.append(args[0])
+        return real_preview(*args, **kwargs)
+
+    monkeypatch.setattr(module, "preview", tracked)
+    files = []
+    for index in range(9):
+        pixels = png(bytes([index * 20, 0, 0, 255]))
+        content = archive(
+            {
+                "assets/example/blockstates/paint.json": {"variants": {"": {"model": "example:block/paint"}}},
+                "assets/example/models/block/paint.json": cube("example:block/paint"),
+                "assets/example/textures/block/paint.png": pixels,
+            }
+        )
+        files.append(("file", (f"mod-{index}.jar", content)))
+    response = client.post("/api/textures", files=files)
+    assert response.status_code == 200, response.text
+    sources = response.json()["textures"]["minecraft"]["sources"]
+    assert [item["name"] for item in sources] == [f"mod-{i}.jar" for i in range(9)]
+    assert len(calls) == 2, "Refresh source and converted previews once after the entire batch"
+    library = module.sessions[client.cookies["fromthecraft"]].textures
+    key = library.block_faces("example:paint")["up"]
+    assert library.image(key) == pixels, "The last archive still wins texture overrides"
+    assert client.get("/api/export", params={"result_id": ready["result_id"]}).content == before
 
 
 def test_chunked_upload_limit_is_enforced_before_multipart_parsing(client):

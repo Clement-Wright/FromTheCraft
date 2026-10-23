@@ -49,6 +49,8 @@ class Part:
     mesh: tuple | None = None
     decoration: bool = False
     replaces_host: bool = False
+    detail_sources: tuple[tuple["Part", int], ...] = ()
+    detail_surface: int = 0
 
 
 @dataclass

@@ -24,6 +24,7 @@ EXTRA_SINGLE = tuple(
     "copycats:copycat_" + family
     for family in ("beam", "vertical_step", "slice", "vertical_slice", "corner_slice")
 )
+SMOOTH = tuple("copycats:copycat_" + family for family in ("slope", "vertical_slope", "slope_layer"))
 BASE = State("create:copycat_base")
 BYTE_SLOTS = tuple(
     f"{height}_{depth}{side}"
@@ -43,6 +44,7 @@ SINGLE_IDS = {
     STEP: "create:copycat",
 }
 SINGLE_IDS.update({name: "copycats:copycat" for name in EXTRA_SINGLE})
+SINGLE_IDS.update({name: "copycats:copycat" for name in SMOOTH})
 SUPPORTED = frozenset(SINGLE_IDS) | MULTI_SLOTS.keys()
 DIRECTIONS = {
     "west": (0, -1),

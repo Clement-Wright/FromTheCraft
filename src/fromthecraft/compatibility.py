@@ -98,3 +98,10 @@ for _family in ("slice", "vertical_slice", "corner_slice"):
         "waterlogged": _BOOLEAN,
         **({} if _family == "vertical_slice" else {"half": ["top", "bottom"]}),
     }
+for _family in ("slope", "vertical_slope", "slope_layer"):
+    MOD_STATES["copycats:copycat_" + _family] = {
+        "facing": _HORIZONTAL,
+        "waterlogged": _BOOLEAN,
+        **({} if _family == "vertical_slope" else {"half": ["top", "bottom"]}),
+        **({"layers": [str(n) for n in range(1, 9)]} if _family == "slope_layer" else {}),
+    }

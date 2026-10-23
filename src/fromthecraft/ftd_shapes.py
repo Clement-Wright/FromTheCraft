@@ -74,6 +74,10 @@ def native_shape(entry):
 def planes(shape):
     if shape in PLANES:
         return PLANES[shape]
+    if shape.startswith("copycat_slope_"):
+        layer = int(shape.rsplit("_", 1)[1])
+        lower, upper = (0, layer / 4) if layer <= 4 else ((layer - 4) / 4, 1)
+        return ((0, 1, lower - upper, lower),)
     if shape.startswith("ftd_transition_"):
         *family, a, b = shape.split("_")
         ratio = int(a) / int(b)

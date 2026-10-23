@@ -158,6 +158,10 @@ def mc_target(part, preference, mods=()):
         return base
     if mods and part.mapping_override is None:
         base = mod_target(base, part.material, tuple(part.color), part.transparent, preference, mods)
+    if part.shape == "extreme":
+        from .extreme import paint_target
+
+        return paint_target(part, preference, mods, base)
     if part.shape == "detailed" and part.state is not None:
         return replace(part.state, copied_material=base)
     partial = part.shape.startswith(("slab_", "step_"))

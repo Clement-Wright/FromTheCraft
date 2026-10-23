@@ -31,6 +31,19 @@ def bits(mask):
     return int.from_bytes(np.packbits(mask, bitorder="little").tobytes(), "little")
 
 
+OCTANT_MASKS = tuple(bits(OCTANTS == i) for i in range(8))
+FULL_MASK = (1 << len(DETAIL_SAMPLES)) - 1
+
+
+def byte_candidate(mask):
+    selected = tuple(bool(mask & octant) for octant in OCTANT_MASKS)
+    target = state(
+        "copycats:copycat_byte",
+        **{slot: str(value).lower() for slot, value in zip(BYTE_SLOTS, selected)},
+    )
+    return target, sum(octant for octant, value in zip(OCTANT_MASKS, selected) if value)
+
+
 def state(name, **properties):
     return State(name, tuple(sorted({"waterlogged": "false", **properties}.items())))
 
@@ -116,20 +129,9 @@ def half_layer_options():
     return tuple(options)
 
 
-@lru_cache(maxsize=8192)
-def fit_detail(mask):
-    full = (1 << len(DETAIL_SAMPLES)) - 1
-    if mask == full:
-        return None
-    occupied = np.asarray([bool(mask & (1 << i)) for i in range(len(DETAIL_SAMPLES))])
-    byte_mask = sum(1 << i for i in range(8) if occupied[OCTANTS == i].any())
-    byte = state(
-        "copycats:copycat_byte",
-        **{slot: str(bool(byte_mask & (1 << i))).lower() for i, slot in enumerate(BYTE_SLOTS)},
-    )
-    byte_bits = bits(np.asarray([bool(byte_mask & (1 << i)) for i in OCTANTS]))
+def detail_choices(mask):
     # Prefer a full block on ties, then continuous layers/panels, then discrete bytes.
-    choices = [(None, full), *candidates(), (byte, byte_bits)]
+    choices = [(None, FULL_MASK), *candidates(), byte_candidate(mask)]
     for target, groups in half_layer_options():
         levels = [min(range(9), key=lambda n: (mask ^ variants[n]).bit_count()) for variants in groups]
         # Also offer an outward-rounded profile. The least-volume fit can leave
@@ -151,6 +153,13 @@ def fit_detail(mask):
                     groups[0][negative] | groups[1][positive],
                 )
             )
+    return choices
+
+
+@lru_cache(maxsize=8192)
+def fit_detail(mask):
+    if mask == FULL_MASK:
+        return None
 
     def error(item):
         target, occupied_bits = item
@@ -168,4 +177,4 @@ def fit_detail(mask):
         # corner and leave gaps when viewed from an oblique angle.
         return ((mask & ~occupied_bits).bit_count(), difference)
 
-    return min(choices, key=error)[0]
+    return min(detail_choices(mask), key=error)[0]

@@ -197,6 +197,34 @@ test("Detailed Copycats is opt-in, requires the selected mod, and invalidates ou
   await expect(page.getByRole("status")).toHaveText(/Options changed/);
 });
 
+test("Extreme detail includes Detailed Copycats and invalidates old exports", async ({
+  page,
+}) => {
+  const extreme = page.getByLabel("Extreme detail", { exact: true });
+  const detailed = page.getByLabel("Detailed Copycats", { exact: true });
+  await expect(extreme).not.toBeChecked();
+  await expect(extreme).toBeDisabled();
+  await page.locator(".mod-picker summary").click();
+  await page.getByLabel("Copycats", { exact: true }).check();
+  await extreme.check();
+  await expect(detailed).toBeChecked();
+  await expect(detailed).toBeDisabled();
+  const request = page.waitForRequest("**/api/convert");
+  await page.getByRole("button", { name: "Convert", exact: true }).click();
+  expect((await request).postDataJSON()).toMatchObject({
+    detailed_copycats: true,
+    extreme_detail: true,
+    mods: ["copycats"],
+  });
+  await expect(page.getByRole("status")).toHaveText(/ready to export/);
+  await extreme.uncheck();
+  await expect(detailed).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "Export file" }),
+  ).toBeDisabled();
+  await expect(page.getByRole("status")).toHaveText(/Options changed/);
+});
+
 test("unavailable image requests retain the flat-color fallback", async ({
   page,
 }) => {

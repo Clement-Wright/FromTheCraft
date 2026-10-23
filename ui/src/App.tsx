@@ -42,6 +42,7 @@ export default function App() {
   const [modChoices, setModChoices] = useState<ModChoice[]>([]);
   const [mods, setMods] = useState<string[]>([]);
   const [detailedCopycats, setDetailedCopycats] = useState(false);
+  const [extremeDetail, setExtremeDetail] = useState(false);
   const [displayTextures, setDisplayTextures] = useState(false);
   const [showDecorations, setShowDecorations] = useState(false);
   const [decorationMode, setDecorationMode] = useState("structure");
@@ -163,13 +164,13 @@ export default function App() {
     }
   }
 
-  async function importTextures(file?: File) {
-    if (!file || !initialized) return;
+  async function importTextures(files: File[]) {
+    if (!files.length || !initialized) return;
     setTextureLoading(true);
     setTextureError("");
     const current = generation.current;
     const body = new FormData();
-    body.append("file", file);
+    for (const file of files) body.append("file", file);
     try {
       const refreshed = await mutate(() =>
         request(
@@ -219,6 +220,10 @@ export default function App() {
               format !== "blueprint" &&
               mods.includes("copycats") &&
               detailedCopycats,
+            extreme_detail:
+              format !== "blueprint" &&
+              mods.includes("copycats") &&
+              extremeDetail,
             hollow,
             shell_thickness: shellThickness,
             decoration_mode: decorationMode,
@@ -298,6 +303,8 @@ export default function App() {
       mods: format === "blueprint" ? [] : mods,
       detailed_copycats:
         format !== "blueprint" && mods.includes("copycats") && detailedCopycats,
+      extreme_detail:
+        format !== "blueprint" && mods.includes("copycats") && extremeDetail,
       hollow,
       shell_thickness: shellThickness,
       decoration_mode: decorationMode,
@@ -320,6 +327,7 @@ export default function App() {
       setPreference(s.preference);
       setMods(s.mods);
       setDetailedCopycats(s.detailed_copycats);
+      setExtremeDetail(s.extreme_detail ?? false);
       setHollow(s.hollow);
       setShellThickness(s.shell_thickness);
       setDecorationMode(s.decoration_mode);
@@ -663,8 +671,29 @@ export default function App() {
             <label className="check">
               <input
                 type="checkbox"
-                checked={detailedCopycats}
+                checked={extremeDetail}
                 disabled={format === "blueprint" || !mods.includes("copycats")}
+                onChange={(event) => {
+                  setExtremeDetail(event.target.checked);
+                  if (event.target.checked) setDetailedCopycats(true);
+                  invalidate();
+                }}
+              />
+              Extreme detail
+            </label>
+            <p className="hint">
+              Includes Detailed Copycats, smooth slopes and separate colors for
+              small pieces. Uses your selected decoration mode.
+            </p>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={detailedCopycats || extremeDetail}
+                disabled={
+                  extremeDetail ||
+                  format === "blueprint" ||
+                  !mods.includes("copycats")
+                }
                 onChange={(event) => {
                   setDetailedCopycats(event.target.checked);
                   invalidate();
@@ -810,9 +839,7 @@ export default function App() {
               aria-label="Load texture archive"
               onChange={(event) => {
                 const files = Array.from(event.target.files ?? []);
-                void (async () => {
-                  for (const file of files) await importTextures(file);
-                })();
+                void importTextures(files);
                 event.target.value = "";
               }}
             />

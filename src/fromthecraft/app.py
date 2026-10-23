@@ -152,14 +152,17 @@ def texture_image(request: Request, key: str, token: str = ""):
 
 
 @app.post("/api/textures")
-async def texture_archive(request: Request, file: UploadFile = File(...)):
+async def texture_archive(request: Request, file: list[UploadFile] = File(...)):
     session = session_for(request)
-    content = await file.read(MAX_ARCHIVE_BYTES + 1)
-    await file.close()
     try:
-        await run_in_threadpool(session.textures.add_archive, content, file.filename or "textures.zip")
+        for archive in file:
+            content = await archive.read(MAX_ARCHIVE_BYTES + 1)
+            await run_in_threadpool(session.textures.add_archive, content, archive.filename or "textures.zip")
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+    finally:
+        for archive in file:
+            await archive.close()
     with session.lock:
         source, result, generation = session.source, session.result, session.generation
     source_display = await run_in_threadpool(preview, source, (0, 0, 0), session.textures) if source else None
@@ -268,6 +271,7 @@ class Options(BaseModel):
     scale: Literal[0.25, 0.5, 1, 2, 4] = 1
     preference: Literal["balanced", "material", "color"] = "balanced"
     detailed_copycats: bool = False
+    extreme_detail: bool = False
     decoration_mode: Literal["structure", "decorations", "appearance"] = "structure"
     surface_thickness: Literal[0.0625, 0.125, 0.25, 0.5] = 0.125
     hollow: bool = False
@@ -504,6 +508,7 @@ def start_conversion(request: Request, options: Options):
                 options.detailed_copycats,
                 options.decoration_mode,
                 options.surface_thickness,
+                extreme_detail=options.extreme_detail,
             )
             display = preview(result.scene, result.offset, session.textures)
             with session.lock:

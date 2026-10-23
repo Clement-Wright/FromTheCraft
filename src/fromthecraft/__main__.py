@@ -34,6 +34,24 @@ def main():
         help="Fit finer layers, bytes and panels (requires --mod copycats)",
     )
     conversion.add_argument(
+        "--extreme-detail",
+        action="store_true",
+        help="Fit smooth slopes and independently painted small pieces (requires --mod copycats)",
+    )
+    conversion.add_argument(
+        "--decoration-mode",
+        choices=["structure", "decorations", "appearance"],
+        default="structure",
+        help="Choose structural or visible decorative geometry",
+    )
+    conversion.add_argument(
+        "--surface-thickness",
+        type=float,
+        choices=[0.0625, 0.125, 0.25, 0.5],
+        default=0.125,
+        help="Thickness in output blocks for open decorative surfaces",
+    )
+    conversion.add_argument(
         "--mod",
         action="append",
         choices=sorted(MODS),
@@ -59,6 +77,9 @@ def main():
             shell_thickness=args.shell_thickness,
             mods=args.mod,
             detailed_copycats=args.detailed_copycats,
+            extreme_detail=args.extreme_detail,
+            decoration_mode=args.decoration_mode,
+            surface_thickness=args.surface_thickness,
         )
         with args.destination.open("xb") as target:
             target.write(result.content)

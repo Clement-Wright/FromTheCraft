@@ -5,7 +5,7 @@ import numpy as np
 from .geometry import hollow_cells, voxelize
 from .ftd import read_blueprint, write_blueprint
 from .minecraft import read_litematic, read_structure, write_litematic, write_structure
-from .model import Result
+from .model import Result, Cancelled
 from .palettes import mc_target
 from .compatibility import MODS, selected_mods
 
@@ -23,6 +23,7 @@ def convert(
     detailed_copycats=False,
     decoration_mode="structure",
     surface_thickness=0.125,
+    extreme_detail=False,
 ):
     if decoration_mode not in {"structure", "decorations", "appearance"}:
         raise ValueError("Unknown decoration mode")
@@ -41,6 +42,8 @@ def convert(
         raise ValueError("Choose a format in the other game")
     if detailed_copycats and ("copycats" not in mods or output == "blueprint"):
         raise ValueError("Detailed Copycats requires Copycats+ and Minecraft output")
+    if extreme_detail and ("copycats" not in mods or output == "blueprint"):
+        raise ValueError("Extreme detail requires Copycats+ and Minecraft output")
     scene = prepare_meshes(scene, decoration_mode, surface_thickness, scale)
     allowed = {block["name"] for slug in mods for block in MODS[slug]["blocks"]}
     for part in scene.parts:
@@ -56,7 +59,10 @@ def convert(
                 raise ValueError("Minecraft material overrides require Minecraft output")
             if not mapping.name.startswith("minecraft:") and mapping.name not in allowed:
                 raise ValueError(f"Enable the mod required by mapping {mapping.name}")
-    cells, offset = voxelize(scene, scale, progress, cancelled, detailed=detailed_copycats)
+    options = {"extreme": True} if extreme_detail else {}
+    cells, offset = voxelize(
+        scene, scale, progress, cancelled, detailed=detailed_copycats or extreme_detail, **options
+    )
     if not cells:
         raise ValueError("No structural blocks remain after skipped blocks")
     notices = Counter(scene.notices)
@@ -82,7 +88,14 @@ def convert(
             notices[
                 "Approximated partial glass with full transparent blocks; vanilla has no glass slabs or stairs"
             ] += 1
-    states = {p: mc_target(part, preference, mods) for p, part in cells.items()}
+    states = {}
+    for index, (position, part) in enumerate(cells.items()):
+        if index % 256 == 0:
+            if cancelled and cancelled():
+                raise Cancelled("Conversion cancelled")
+            if progress:
+                progress(.88 + .03 * index / max(1, len(cells)))
+        states[position] = mc_target(part, preference, mods)
     full_fallbacks = sum(
         part.shape.startswith(("slab_", "step_"))
         and not states[pos].copied_material
@@ -93,7 +106,11 @@ def convert(
         notices["Used matching full blocks where the selected material has no slab or stair"] += (
             full_fallbacks
         )
-    if detailed_copycats:
+    if extreme_detail:
+        notices[
+            "Extreme detail fits smooth slopes, fine Copycats pieces and independent piece materials"
+        ] += 1
+    elif detailed_copycats:
         notices["Detailed Copycats fits layers, panels and bytes to sampled source geometry"] += 1
     if mods:
         notices[
@@ -103,7 +120,11 @@ def convert(
     writer, reader = (
         (write_structure, read_structure) if output == "nbt" else (write_litematic, read_litematic)
     )
+    if cancelled and cancelled():
+        raise Cancelled("Conversion cancelled")
     content = writer(states, size)
+    if cancelled and cancelled():
+        raise Cancelled("Conversion cancelled")
     if progress:
         progress(0.95)
     return Result(content, reader(content), output, offset, notices)

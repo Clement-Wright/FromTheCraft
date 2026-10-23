@@ -148,17 +148,39 @@ def merge_seed_masks(seed_masks, keys, octants, occupancy):
                 seed_masks[key] = seed_masks.get(key, 0) | (1 << int(octant))
 
 
-def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=False):
+def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=False, extreme=False):
+    from concurrent.futures import ThreadPoolExecutor
+
+    workers = ThreadPoolExecutor(max_workers=4, thread_name_prefix="mesh-samples")
+    wait_for_workers = True
+    try:
+        return _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers)
+    except Cancelled:
+        # Running chunks retain their own read-only inputs and discard results.
+        # Do not hold up cancellation while those bounded queries finish.
+        wait_for_workers = False
+        raise
+    finally:
+        workers.shutdown(wait=wait_for_workers, cancel_futures=True)
+
+
+def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers):
     from .detail import DETAIL_SAMPLES, fit_detail
 
+    detailed = detailed or extreme
     samples = DETAIL_SAMPLES if detailed else SAMPLES
     sample_count = len(samples)
     full_mask = (1 << sample_count) - 1
     cells, occupancy, fallback = {}, {}, {}
+    contributions = {}
     low, high = bounds(scene, scale)
     origin = np.floor(low + 1e-6).astype(int)
     checked_size(np.maximum(1, np.ceil(high - 1e-6).astype(int) - origin))
     for index, part in enumerate(scene.parts):
+        if extreme:
+            from .extreme import appearance_key, record_contribution
+
+            appearance = appearance_key(part)
         if index % 64 == 0:
             if cancelled and cancelled():
                 raise Cancelled("Conversion cancelled")
@@ -178,11 +200,13 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=Fals
         solid_box = part.shape == "box" and aligned and grid_box
         inv = None if solid_box else np.linalg.inv(part.transform)
         mesh_sampler = None
+        sampled = set() if extreme else None
         if part.mesh:
             from .mesh_geometry import MeshSampler
 
             verts, indices, closed, thickness, span = part.mesh
             mesh_sampler = MeshSampler(verts * span, indices, thickness, cancelled, closed)
+            mesh_sampler.executor = workers
         # Keep the denser detail grid within the former sampling memory budget.
         batch_size = max(1, 1_572_864 // sample_count)
         for start in range(0, len(candidates), batch_size):
@@ -195,7 +219,15 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=Fals
                 # occupancy or the first contributor that owns its material.
                 if occupancy:
                     batch = batch[
-                        [occupancy.get(tuple(position - origin), 0) != full_mask for position in batch]
+                        [
+                            (
+                                contributions.get(tuple(position - origin), {}).get(appearance, (None, 0))[1]
+                                if extreme
+                                else occupancy.get(tuple(position - origin), 0)
+                            )
+                            != full_mask
+                            for position in batch
+                        ]
                     ]
                     if not len(batch):
                         continue
@@ -215,6 +247,10 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=Fals
                     )
                     occupancy[key] = occupancy.get(key, 0) | bits
                     cells.setdefault(key, part)
+                    if extreme:
+                        sampled.add(key)
+                        group = contributions.setdefault(key, {})
+                        record_contribution(group, part, appearance, bits)
         # Forward sampling protects small features that fall between target sample centers.
         if not aligned or min(part.size) * scale < 0.5 or part.shape != "box":
             axes = [
@@ -232,7 +268,8 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=Fals
             source_seeds = iter(product(*axes))
             seed_batches = (
                 surface_seed_batches(part, scale, cancelled)
-                if part.mesh else iter(lambda: list(islice(source_seeds, 4096)), [])
+                if part.mesh
+                else iter(lambda: list(islice(source_seeds, 4096)), [])
             )
             for batch in seed_batches:
                 if cancelled and cancelled():
@@ -241,9 +278,20 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=Fals
                 seeds = seeds * part.size if mesh_sampler else seeds[contains(part.shape, seeds)] * part.size
                 world_seeds = (seeds @ part.transform[:3, :3].T + part.transform[:3, 3]) * scale
                 positions = np.floor(world_seeds + 1e-7).astype(int)
-                octants = (world_seeds - positions >= 0.5).astype(int) @ [4, 2, 1]
-                merge_seed_masks(seed_masks, positions - origin, octants, occupancy)
+                if extreme:
+                    from .extreme import merge_fine_seeds
+
+                    merge_fine_seeds(seed_masks, positions - origin, world_seeds - positions, sampled)
+                else:
+                    octants = (world_seeds - positions >= 0.5).astype(int) @ [4, 2, 1]
+                    merge_seed_masks(seed_masks, positions - origin, octants, occupancy)
             for position, mask in seed_masks.items():
+                if extreme:
+                    occupancy[position] = occupancy.get(position, 0) | mask
+                    cells.setdefault(position, part)
+                    group = contributions.setdefault(position, {})
+                    record_contribution(group, part, appearance, mask)
+                    continue
                 previous, owner = fallback.get(position, (0, part))
                 if detailed:
                     selected = np.asarray([bool(mask & (1 << bit)) for bit in range(8)])
@@ -261,6 +309,8 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=Fals
     for position, (mask, part) in fallback.items():
         if position not in occupancy:
             occupancy[position], cells[position] = mask, part
+            if extreme:
+                contributions[position] = {appearance_key(part): (part, mask)}
     if len(cells) > MAX_PARTS:
         raise ValueError(f"Output exceeds {MAX_PARTS:,} occupied cells; choose a smaller scale or structure")
     for index, (position, part) in enumerate(cells.items()):
@@ -270,7 +320,24 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=Fals
             if progress:
                 progress(0.75 + 0.03 * index / max(1, len(cells)))
         mask = occupancy[position]
-        if detailed:
+        if extreme:
+            from .extreme import fit_extreme, exposed_samples
+
+            neighbors = []
+            for axis in range(3):
+                for direction in (-1, 1):
+                    other = list(position)
+                    other[axis] += direction
+                    neighbors.append(occupancy.get(tuple(other), 0))
+
+            cells[position] = replace(
+                part,
+                shape="extreme",
+                state=fit_extreme(mask),
+                detail_sources=tuple(contributions[position].values()),
+                detail_surface=exposed_samples(mask, tuple(neighbors)),
+            )
+        elif detailed:
             target = fit_detail(mask)
             cells[position] = (
                 replace(part, shape="detailed", state=target) if target else replace(part, shape="box")

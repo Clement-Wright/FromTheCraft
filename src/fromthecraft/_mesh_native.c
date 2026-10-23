@@ -12,12 +12,16 @@ static double dot3(const double *a, const double *b) {
     return (a[0] * b[0] + a[1] * b[1]) + a[2] * b[2];
 }
 
-static double surface_distance(const double *p, const double *t, int *uncertain) {
+static double surface_distance(const double *p, const double *t, double cutoff, double margin, int *uncertain) {
     const double *a = t, *ab = t + 3, *ac = t + 6, *normal = t + 9;
     double norm2 = t[12], aa = t[13], bb = t[14], cc = t[15], denominator = t[16];
     double q[3], projected[3];
     for (int k = 0; k < 3; k++) q[k] = p[k] - a[k];
     double nd = dot3(q, normal);
+    double plane_distance = nd * nd / norm2;
+    /* Distance to the whole plane is a lower bound on distance to its
+     * triangle and edges. Reject only beyond the conservative rounding margin. */
+    if (isfinite(plane_distance) && plane_distance > cutoff + margin) return plane_distance;
     for (int k = 0; k < 3; k++) projected[k] = q[k] - nd * normal[k] / norm2;
     double pab = dot3(projected, ab), pac = dot3(projected, ac);
     double u = (cc * pab - bb * pac) / denominator;
@@ -27,7 +31,7 @@ static double surface_distance(const double *p, const double *t, int *uncertain)
         fabs(u) <= branch_margin || fabs(v) <= branch_margin || fabs(u + v - 1) <= branch_margin) {
         *uncertain = 1;
     }
-    double distance = (u >= 0 && v >= 0 && u + v <= 1) ? nd * nd / norm2 : INFINITY;
+    double distance = (u >= 0 && v >= 0 && u + v <= 1) ? plane_distance : INFINITY;
     for (int edge = 0; edge < 3; edge++) {
         const double *start = t + 17 + edge * 7, *direction = start + 3;
         double length = start[6];
@@ -148,7 +152,6 @@ static PyObject *contains(PyObject *self, PyObject *args) {
                     if (u >= 0 && v >= 0 && u + v < 1 && t[0] + u * t[3] + v * t[6] > p[0]) hits++;
                 } else {
                     if (t[12] < 1e-20 || t[16] <= 1e-20) continue;
-                    double distance = surface_distance(p, t, &uncertain);
                     /* BLAS can contract dot products differently. Re-evaluate
                      * an entire original batch when that could affect a bit. */
                     double magnitude = 1;
@@ -156,9 +159,17 @@ static PyObject *contains(PyObject *self, PyObject *args) {
                         magnitude += p[k] * p[k] + t[k] * t[k] + t[k + 3] * t[k + 3] + t[k + 6] * t[k + 6];
                     }
                     double margin = 512 * DBL_EPSILON * magnitude;
+                    int triangle_uncertain = 0;
+                    double distance = surface_distance(p, t, cutoff, margin, &triangle_uncertain);
                     if (!isfinite(distance) || fabs(distance - cutoff) <= margin ||
-                        t[16] <= 1e-10 * t[13] * t[15]) uncertain = 1;
-                    if (distance <= cutoff) hits = 1;
+                        t[16] <= 1e-10 * t[13] * t[15]) triangle_uncertain = 1;
+                    uncertain |= triangle_uncertain;
+                    if (distance <= cutoff) {
+                        hits = 1;
+                        /* A robust hit proves this union query. Later triangles
+                         * cannot change it; keep the original leaf work count. */
+                        if (!triangle_uncertain) break;
+                    }
                 }
             }
         }

@@ -231,7 +231,13 @@ def scene_from_cells(cells, format, notices, records=None, source_hash="", entri
         material, color = mc_material((state.copied_material or state).name)
         shape, size = "box", (1, 1, 1)
         props = dict(state.properties)
-        if state.name.endswith("_slab") and props.get("type", "bottom") != "double":
+        from .smooth_shapes import smooth_geometry
+
+        smooth = smooth_geometry(state)
+        if smooth:
+            shape, transform = smooth
+            transform[:3, 3] += position
+        elif state.name.endswith("_slab") and props.get("type", "bottom") != "double":
             axis = "xyz".index(props.get("axis", "y")) if state.name == "copycats:copycat_slab" else 1
             size = tuple(0.5 if index == axis else 1 for index in range(3))
             if props.get("type") == "top":
