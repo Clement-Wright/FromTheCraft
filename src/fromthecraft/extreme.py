@@ -12,7 +12,6 @@ from .detail import (
     FULL_MASK,
     VOLUME_MASK,
     bits,
-    byte_candidate,
     detail_choices,
     state,
 )
@@ -58,13 +57,10 @@ def fit_extreme(mask):
         return None
     # Smooth surfaces win exact geometric ties. The full-block fallback means
     # every sampled solid point can always be retained, including hull probes.
-    choices = (*extra_candidates(), *detail_choices(mask))
+    choices = (*extra_candidates(), *detail_choices(mask, covering_only=True))
     return min(
-        choices,
-        key=lambda item: (
-            (mask & ~item[1]).bit_count(),
-            ((mask ^ item[1]) & VOLUME_MASK).bit_count(),
-        ),
+        (item for item in choices if not mask & ~item[1]),
+        key=lambda item: ((mask ^ item[1]) & VOLUME_MASK).bit_count(),
     )[0]
 
 
@@ -137,6 +133,29 @@ def slot_masks(target):
 
 
 @lru_cache(maxsize=2048)
+def material_partitions(target):
+    """Split paint regions as finely as possible without changing the hull."""
+    from .copycats import MULTI_SLOTS
+
+    mask = target_mask(target)
+    equivalents = [
+        candidate
+        for candidate, occupied in detail_choices(mask, covering_only=True)
+        if candidate and candidate.name in MULTI_SLOTS and occupied == mask
+    ]
+    if target and target.name in MULTI_SLOTS:
+        equivalents.insert(0, target)
+    finest = max((len(slot_masks(candidate)) for candidate in equivalents), default=0)
+    seen, result = set(), []
+    for candidate in equivalents:
+        regions = tuple(sorted(mask for _, mask in slot_masks(candidate)))
+        if len(regions) == finest and regions not in seen:
+            seen.add(regions)
+            result.append(candidate)
+    return tuple(result)
+
+
+@lru_cache(maxsize=2048)
 def surface_mask(mask):
     packed = np.frombuffer(mask.to_bytes((len(DETAIL_SAMPLES) + 7) // 8, "little"), dtype=np.uint8)
     volume = np.unpackbits(packed, bitorder="little")[:4096].reshape(16, 16, 16).astype(bool)
@@ -152,7 +171,6 @@ def surface_mask(mask):
 
 def paint_target(part, preference, mods, base):
     from .palettes import mc_target
-    from .copycats import MULTI_SLOTS
 
     target = part.state
     if not part.detail_sources:
@@ -173,12 +191,8 @@ def paint_target(part, preference, mods, base):
         material = next(iter(materials), base)
         return replace(target, copied_material=material) if target else material
 
-    # Bytes keep eight independently painted half-block regions without changing
-    # the fitted hull. A slab/step may have an identical byte occupancy as well.
-    if target is None or target.name not in MULTI_SLOTS:
-        byte, occupied = byte_candidate(target_mask(target))
-        if occupied == target_mask(target):
-            target = byte
+    # A thin single-material panel/layer can have an identical byte-panel or
+    # half-layer hull, allowing separate colors without making the detail thicker.
     boundary = part.detail_surface or surface_mask(target_mask(target))
 
     def select(mask):
@@ -193,8 +207,17 @@ def paint_target(part, preference, mods, base):
                 choices.append((count / total, count, material))
         return max(choices, key=lambda item: item[:2])[2] if choices else base
 
-    if target and target.name in MULTI_SLOTS:
-        painted = tuple((slot, select(mask)) for slot, mask in slot_masks(target))
+    partitions = []
+    for candidate in material_partitions(target):
+        painted = tuple((slot, select(mask)) for slot, mask in slot_masks(candidate))
+        agreement = sum(
+            (materials.get(material, 0) & mask).bit_count()
+            + 8 * (materials.get(material, 0) & mask & boundary).bit_count()
+            for (slot, mask), (_, material) in zip(slot_masks(candidate), painted)
+        )
+        partitions.append((candidate, painted, (len({material for _, material in painted}), agreement)))
+    if partitions:
+        target, painted, _ = max(partitions, key=lambda item: item[2])
         if len({material for _, material in painted}) > 1:
             return replace(target, copied_material=None, copied_materials=painted)
         return replace(target, copied_material=painted[0][1] if painted else base)

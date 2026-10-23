@@ -129,17 +129,32 @@ def half_layer_options():
     return tuple(options)
 
 
-def detail_choices(mask):
+def _covering_level(mask, variants):
+    wanted = mask & variants[8]
+    low, high = 0, 8
+    while low < high:
+        middle = (low + high) // 2
+        if wanted & ~variants[middle]:
+            low = middle + 1
+        else:
+            high = middle
+    return low
+
+
+def detail_choices(mask, covering_only=False):
     # Prefer a full block on ties, then continuous layers/panels, then discrete bytes.
     choices = [(None, FULL_MASK), *candidates(), byte_candidate(mask)]
     for target, groups in half_layer_options():
-        levels = [min(range(9), key=lambda n: (mask ^ variants[n]).bit_count()) for variants in groups]
         # Also offer an outward-rounded profile. The least-volume fit can leave
         # a zero-height half at a slope tip, opening a hole in a continuous hull.
-        covering = [
-            next(n for n in range(9) if not (mask & variants[8]) & ~variants[n]) for variants in groups
-        ]
-        for negative, positive in dict.fromkeys((tuple(levels), tuple(covering))):
+        covering = tuple(_covering_level(mask, variants) for variants in groups)
+        pairs = [covering]
+        if not covering_only:
+            levels = tuple(
+                min(range(9), key=lambda n: (mask ^ variants[n]).bit_count()) for variants in groups
+            )
+            pairs = dict.fromkeys((levels, covering))
+        for negative, positive in pairs:
             if not (negative or positive):
                 continue
             properties = {
@@ -172,9 +187,10 @@ def fit_detail(mask):
                 "copycats:copycat_byte": 4,
                 "create:copycat_panel": 1,
             }.get(target.name, 0)
-        # Retain the sampled solid, including near-face probes, before reducing
-        # excess volume. Projections alone allow open boards to replace a solid
-        # corner and leave gaps when viewed from an oblique angle.
-        return ((mask & ~occupied_bits).bit_count(), difference)
+        return difference
 
-    return min(detail_choices(mask), key=error)[0]
+    # The full-block candidate has zero missing samples, so a non-covering
+    # candidate can never win. Nested half layers need only their least covering
+    # levels: every larger covering level adds volume and the same block penalty.
+    choices = (item for item in detail_choices(mask, covering_only=True) if not mask & ~item[1])
+    return min(choices, key=error)[0]

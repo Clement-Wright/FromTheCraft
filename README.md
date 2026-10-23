@@ -42,7 +42,7 @@ Detailed Copycats rounds partial shapes outward to retain the sampled hull, incl
 
 **Extreme detail** includes Detailed Copycats and adds smooth Copycats slopes, vertical slopes, slope layers, and a wider set of stair shapes. It fits the selected structural and decorative geometry while retaining the sampled hull. Small pieces can carry separate materials: a block of bytes has eight half-block regions, so colored trim and small accents can survive alongside the hull material. Forward sampling also retains tiny details that fall between the volume probes. Features smaller than a target piece may grow to fit that piece; arbitrary blueprint geometry cannot always be reproduced exactly. Extreme detail is off by default and requires Copycats+ and Minecraft output. Choose **Structure + decorations** or **Appearance-focused** to include supported mimics and decorations.
 
-Closely spaced fan blades and thin decal strokes can still merge or become flatter at 1×. A higher output scale gives the available Copycats pieces more room to represent them.
+Where a thin panel or layer has an identical multi-material shape, Extreme uses it to retain separate colors without increasing thickness. Closely spaced fan blades and thin decal strokes can still merge or become flatter at 1×. A higher output scale gives the available Copycats pieces more room to represent them.
 
 The inspector and build list show each copycat's **Applied material**, with separate searchable rows for different materials. Counts describe exported blocks, not survival crafting costs. The exported NBT includes the applied material state and the inspected consumed-item fields. See [mod versions and format checks](MOD_COMPATIBILITY.md) for the exact profiles and unverified in-game behavior.
 

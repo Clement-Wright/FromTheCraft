@@ -145,6 +145,42 @@ def test_extreme_requires_copycats_and_minecraft_output():
         convert(source, "nbt", extreme_detail=True)
 
 
+@pytest.mark.parametrize("output", ["nbt", "litematic"])
+@pytest.mark.parametrize("thickness,colors", [(3 / 16, 4), (1 / 8, 2)])
+@pytest.mark.parametrize("orientation", range(24))
+def test_thin_colored_details_use_equivalent_multi_material_shapes(output, thickness, colors, orientation):
+    parts = []
+    for index in range(colors):
+        x, z = (index // 2, index % 2) if colors == 4 else (index, 0)
+        transform = np.eye(4)
+        transform[:3, :3] = rotation(orientation)
+        transform[:3, 3] = rotation(orientation) @ (x / 2, 0, z / 2)
+        color = ((0.9, 0.1, 0.1), (0.1, 0.1, 0.9), (0.1, 0.9, 0.1), (0.9, 0.9, 0.9))[index]
+        parts.append(
+            Part(
+                "colored panel", "box", (0.5, thickness, 0.5 if colors == 4 else 1), transform, "Stone", color
+            )
+        )
+    result = convert(
+        Scene(parts, "blueprint"), output, mods=("copycats",), extreme_detail=True, preference="color"
+    )
+    target = result.scene.parts[0].state
+    assert len(set(dict(target.copied_materials).values())) == colors
+    from fromthecraft.palettes import mc_target
+    from fromthecraft.compatibility import selected_mods
+
+    for source in parts:
+        center = source.transform[:3, :3] @ (np.array(source.size) / 2) + source.transform[:3, 3]
+        material = mc_target(source, "color", selected_mods(("copycats",)))
+        matching = [
+            p for p in result.scene.parts if dict(target.copied_materials).get(p.material_slot) == material
+        ]
+        assert occupied(Scene(matching, output), np.array([center]), result.offset).all()
+    points = np.random.default_rng(716).uniform(0.0001, 0.9999, (2000, 3))
+    world = points @ rotation(orientation).T
+    np.testing.assert_array_equal(occupied(result.scene, world, result.offset), points[:, 1] <= thickness)
+
+
 def test_small_decoration_keeps_its_color_on_a_larger_host_without_opening_holes():
     host = Part("white host", "box", (1, 1, 1), np.eye(4), "Stone", (0.95, 0.95, 0.95))
     transform = np.eye(4)
