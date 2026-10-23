@@ -13,7 +13,7 @@ from pathlib import Path, PurePosixPath
 
 MAX_ARCHIVE_BYTES = 128 * 1024**2
 MAX_EXPANDED_BYTES = 512 * 1024**2
-MAX_MEMBERS = 40_000
+MAX_MEMBERS = 160_000
 MAX_IMAGE_BYTES = 16 * 1024**2
 MAX_IMAGE_DIMENSION = 2048
 MAX_JSON_BYTES = 2 * 1024**2
@@ -127,12 +127,12 @@ class TextureLibrary:
             raise ValueError("Invalid texture ZIP/JAR archive")
         members = int.from_bytes(content[trailer + 10 : trailer + 12], "little")
         if members + self._members > MAX_MEMBERS:
-            raise ValueError("Texture archive members limit exceeded (40000)")
+            raise ValueError(f"Texture archive members limit exceeded ({MAX_MEMBERS})")
         try:
             zipped = zipfile.ZipFile(io.BytesIO(content))
             entries = zipped.infolist()
             if len(entries) + self._members > MAX_MEMBERS:
-                raise ValueError("Texture archive members limit exceeded (40000)")
+                raise ValueError(f"Texture archive members limit exceeded ({MAX_MEMBERS})")
             expanded = sum(entry.file_size for entry in entries)
             if expanded + self._expanded > MAX_EXPANDED_BYTES:
                 raise ValueError("Texture archive expanded size limit exceeded (512 MiB)")
@@ -194,7 +194,7 @@ class TextureLibrary:
         model = self._json(f"assets/{namespace}/models/{path}.json")
         if not model:
             return {}
-        parent = _resource(model.get("parent"), namespace)
+        parent = _resource(model.get("parent"))
         inherited = self._model(parent, seen + (name,)) if parent else {}
         textures = inherited.get("textures", {}).copy()
         own = model.get("textures", {})
@@ -299,7 +299,7 @@ class TextureLibrary:
                     application = application[0] if application else {}
                 if not isinstance(application, dict):
                     continue
-                model_name = _resource(application.get("model"), namespace)
+                model_name = _resource(application.get("model"))
                 if model_name is None:
                     continue
                 model = self._model(model_name)
@@ -322,7 +322,7 @@ class TextureLibrary:
                         while isinstance(texture, str) and texture.startswith("#") and texture not in visited:
                             visited.add(texture)
                             texture = textures.get(texture[1:])
-                        texture = _resource(texture, model_name.split(":", 1)[0])
+                        texture = _resource(texture)
                         key = self._texture_key(texture) if texture else None
                         if key:
                             faces[self._rotated(face, x, y)] = key
@@ -379,8 +379,36 @@ class TextureLibrary:
 
     def _discover_minecraft(self, root):
         vanilla = root / "versions/1.21.1/1.21.1.jar"
-        paths = [(vanilla, "vanilla")]
-        if not vanilla.is_file():
+        clients = [vanilla] if vanilla.is_file() else []
+
+        # Launchers often store the same client under an inherited version ID.
+        # Only follow safe IDs whose chain identifies the pinned 1.21.1 client.
+        def client(version, seen=()):
+            if not isinstance(version, str) or not re.fullmatch(r"[A-Za-z0-9_.+-]{1,160}", version):
+                return None
+            if version in (".", "..") or version in seen or len(seen) >= 24:
+                return None
+            folder = root / "versions" / version
+            doc = self._local_json(folder / (version + ".json"))
+            pinned = (
+                version == "1.21.1"
+                or doc.get("downloads", {}).get("client", {}).get("sha1")
+                == "30c73b1c5da787909b2f73340419fdf13b9def88"
+            )
+            if pinned:
+                jar_id = doc.get("jar", version)
+                if jar_id != version:
+                    return client(jar_id, seen + (version,))
+                path = folder / (version + ".jar")
+                return path if path.is_file() else None
+            return client(doc.get("inheritsFrom"), seen + (version,))
+
+        for folder in sorted((root / "versions").glob("*"))[:256]:
+            path = client(folder.name)
+            if path and path not in clients:
+                clients.append(path)
+        paths = [(path, "vanilla") for path in clients]
+        if not clients:
             self._reasons["minecraft"].append(
                 "Minecraft 1.21.1 client JAR not found; import a local client JAR or resource-pack ZIP."
             )

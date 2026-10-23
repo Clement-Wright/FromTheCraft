@@ -70,7 +70,19 @@ def preview(scene, offset=(0, 0, 0), textures=None):
         group["matrices"].extend(np.round(matrix.T.reshape(-1), 6).tolist())
         group["colors"].extend([round(float(c), 6) for c in part.color])
     low, high = bounds(scene)
+    coverage = {
+        "resolved_faces": sum(len(block.get("textures", {})) for block in blocks),
+        "missing_faces": sum(6 - len(block.get("textures", {})) for block in blocks),
+        "missing_blocks": sorted(
+            {
+                block.get("copied_material", {}).get("name", block["name"])
+                for block in blocks
+                if len(block.get("textures", {})) < 6
+            }
+        ),
+    }
     return {
+        "texture_coverage": coverage,
         "groups": list(groups.values()),
         "blocks": blocks,
         "materials": [

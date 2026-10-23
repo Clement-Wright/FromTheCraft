@@ -4,6 +4,29 @@ from fromthecraft.model import Part, Scene, State
 from fromthecraft.preview import preview
 
 
+def test_preview_reports_missing_target_faces_separately_from_ftd_availability():
+    from fromthecraft.textures import TextureLibrary
+    from test_textures import archive, cube, png
+
+    textures = TextureLibrary(discover=False)
+    textures.add_archive(
+        archive(
+            {"assets/example/models/block/red.json": cube(), "assets/example/textures/block/red.png": png()}
+        ),
+        "mod.jar",
+    )
+    state = State("copycats:copycat_layer", copied_material=State("example:red"))
+    part = Part(state.name, "box", (1, 0.5, 1), np.eye(4), "Metal", (0.5, 0.5, 0.5), state=state)
+    display = preview(Scene([part], "nbt"), textures=textures)
+    assert display["texture_coverage"] == {"resolved_faces": 6, "missing_faces": 0, "missing_blocks": []}
+    missing = preview(
+        Scene([Part("example:missing", "box", (1, 1, 1), np.eye(4), "Metal", (0.5, 0.5, 0.5))], "nbt"),
+        textures=textures,
+    )
+    assert missing["texture_coverage"]["missing_faces"] == 6
+    assert missing["texture_coverage"]["missing_blocks"] == ["example:missing"]
+
+
 def test_instance_metadata_matches_order_and_inventory_counts_block_types():
     parts = []
     for x, facing in enumerate(["north", "south", "north"]):

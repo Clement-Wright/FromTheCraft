@@ -34,6 +34,11 @@ export type ModChoice = {
 };
 
 export type Display = {
+  texture_coverage?: {
+    resolved_faces: number;
+    missing_faces: number;
+    missing_blocks: string[];
+  };
   blocks: BlockIdentity[];
   materials: (BlockIdentity & { count: number })[];
   groups: {

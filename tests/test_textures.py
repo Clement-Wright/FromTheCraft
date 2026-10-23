@@ -322,6 +322,134 @@ def test_gui_only_mod_images_do_not_claim_block_texture_availability():
     assert not library.status()["minecraft"]["available"]
 
 
+def test_inherited_client_and_mod_assets_are_discovered_without_fixed_jar_name(tmp_path):
+    versions = tmp_path / "versions"
+    parent = versions / "client-custom"
+    child = versions / "neoforge-pack"
+    parent.mkdir(parents=True)
+    child.mkdir()
+    (parent / "client-custom.json").write_text(
+        json.dumps(
+            {
+                "id": "client-custom",
+                "releaseTime": "2024-08-08",
+                "downloads": {"client": {"sha1": "30c73b1c5da787909b2f73340419fdf13b9def88"}},
+            }
+        )
+    )
+    (child / "neoforge-pack.json").write_text(
+        json.dumps({"id": "neoforge-pack", "inheritsFrom": "client-custom"})
+    )
+    (parent / "client-custom.jar").write_bytes(
+        archive(
+            {
+                "assets/minecraft/models/block/cube_all.json": cube("#all"),
+                "assets/minecraft/textures/block/stone.png": png(),
+            }
+        )
+    )
+    mods = tmp_path / "mods"
+    mods.mkdir()
+    blue = png(b"\0\0\xff\xff")
+    (mods / "mod.jar").write_bytes(
+        archive(
+            {
+                "assets/example/models/block/paint.json": {
+                    "parent": "minecraft:block/cube_all",
+                    "textures": {"all": "example:block/paint"},
+                },
+                "assets/example/textures/block/paint.png": blue,
+            }
+        )
+    )
+    library = TextureLibrary(minecraft_root=tmp_path, ftd_root=tmp_path / "missing")
+    faces = library.block_faces("example:paint")
+    assert len(faces) == 6
+    assert library.image(faces["up"]) == blue
+    assert {s["kind"] for s in library.status()["sources"]} == {"vanilla", "mod"}
+
+
+def test_incompatible_and_unsafe_inheritance_cannot_supply_client_assets(tmp_path):
+    for name, manifest in [
+        ("wrong", {"id": "wrong", "inheritsFrom": "1.20.1"}),
+        ("unsafe", {"id": "unsafe", "inheritsFrom": "../../outside"}),
+        ("cycle", {"id": "cycle", "inheritsFrom": "cycle"}),
+    ]:
+        folder = tmp_path / "versions" / name
+        folder.mkdir(parents=True)
+        (folder / (name + ".json")).write_text(json.dumps(manifest))
+        (folder / (name + ".jar")).write_bytes(archive({"assets/example/textures/block/red.png": png()}))
+    library = TextureLibrary(minecraft_root=tmp_path, ftd_root=tmp_path / "missing")
+    assert not library.status()["minecraft"]["available"]
+
+
+def test_mod_resource_override_changes_one_face_and_preserves_inherited_faces():
+    library = TextureLibrary(discover=False)
+    red, blue = png(), png(b"\0\0\xff\xff")
+    library.add_archive(
+        archive(
+            {
+                "assets/base/models/block/cube.json": {
+                    "textures": {"side": "base:block/red", "top": "base:block/red"},
+                    "elements": [{"faces": {"up": {"texture": "#top"}, "north": {"texture": "#side"}}}],
+                },
+                "assets/base/textures/block/red.png": red,
+                "assets/example/models/block/paint.json": {
+                    "parent": "base:block/cube",
+                    "textures": {"top": "example:block/top"},
+                },
+                "assets/example/textures/block/top.png": blue,
+            }
+        ),
+        "mod.jar",
+    )
+    faces = library.block_faces("example:paint")
+    assert library.image(faces["up"]) == blue
+    assert library.image(faces["north"]) == red
+
+
+def test_unqualified_mod_model_parent_uses_the_minecraft_namespace():
+    library = TextureLibrary(discover=False)
+    library.add_archive(
+        archive(
+            {
+                "assets/minecraft/models/block/cube_all.json": cube("#all"),
+                "assets/minecraft/textures/block/stone.png": png(),
+                "assets/example/models/block/paint.json": {
+                    "parent": "block/cube_all",
+                    "textures": {"all": "block/stone"},
+                },
+            }
+        ),
+        "mod.zip",
+    )
+    assert len(library.block_faces("example:paint")) == 6
+
+
+def test_pinned_compatible_mod_set_fits_the_bounded_texture_library():
+    from pathlib import Path
+    from fromthecraft.compatibility import BUILDING_BLOCKS
+
+    folder = Path("research/mod-compat")
+    jars = list(folder.glob("*.jar"))
+    if len(jars) < 8:
+        pytest.skip("Local pinned compatibility JARs required")
+    library = TextureLibrary(discover=False)
+    for path in sorted(jars, key=lambda p: p.name != "minecraft-1.21.1-client.jar"):
+        library.add_archive(path.read_bytes(), path.name)
+    for name in (
+        "minecraft:red_concrete",
+        "create:cut_scorchia",
+        "chipped:white_concrete_bricks",
+        "dndecor:cut_dolomite",
+        "createdeco:industrial_iron_sheet_metal",
+    ):
+        block = BUILDING_BLOCKS.get(name)
+        faces = library.block_faces(name, block.get("properties", {}) if block else {})
+        assert len(faces) == 6, name
+        assert all(library.image(key).startswith(b"\x89PNG") for key in faces.values())
+
+
 def test_multipart_conditions_and_texture_reference_cycle():
     library = TextureLibrary(discover=False)
     library.add_archive(

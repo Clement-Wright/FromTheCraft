@@ -560,10 +560,14 @@ export default function App() {
               hidden
               ref={textureInput}
               type="file"
+              multiple
               accept=".zip,.jar"
               aria-label="Load texture archive"
               onChange={(event) => {
-                void importTextures(event.target.files?.[0]);
+                const files = Array.from(event.target.files ?? []);
+                void (async () => {
+                  for (const file of files) await importTextures(file);
+                })();
                 event.target.value = "";
               }}
             />
@@ -601,12 +605,24 @@ export default function App() {
             </summary>
             <p>
               Load a local Minecraft client JAR, mod JAR or resource-pack ZIP.
-              Assets stay in this local session.
+              You can select your client and mod JARs together. Assets stay in
+              this local session.
             </p>
             {textureStatus?.reasons?.map((reason) => (
               <p key={reason}>{reason}</p>
             ))}
           </details>
+          {displayTextures &&
+            status.converted?.texture_coverage &&
+            status.converted.texture_coverage.missing_faces > 0 && (
+              <p className="source-notice" role="status">
+                Minecraft preview is missing textures for{" "}
+                {status.converted.texture_coverage.missing_blocks.length} block
+                types. Load your Minecraft 1.21.1 client JAR and the JARs for
+                your selected mods with Load textures. FtD textures do not
+                supply Minecraft textures.
+              </p>
+            )}
           {textureError && (
             <p className="texture-error" role="alert">
               {textureError}
