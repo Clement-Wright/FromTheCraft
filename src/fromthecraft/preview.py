@@ -6,8 +6,23 @@ from .ftd_shapes import vertices
 
 def preview(scene, offset=(0, 0, 0), textures=None):
     groups, blocks, block_ids, inventory = {}, [], {}, {}
+    records = {}
     counted = set()
     for part in scene.parts:
+        record = part.source_record
+        if record:
+            records.setdefault(
+                record.id,
+                {
+                    "id": record.id,
+                    "type_key": record.type_key,
+                    "kind": record.kind,
+                    "path": list(record.path),
+                    "parent_path": list(record.parent_path),
+                    "host_id": record.host_id,
+                    "name": part.identity,
+                },
+            )
         properties = tuple(sorted(part.state.properties)) if part.state else ()
         copied = part.state.copied_material if part.state else None
         if part.state and part.material_slot:
@@ -44,7 +59,13 @@ def preview(scene, offset=(0, 0, 0), textures=None):
         slots = part.state.copied_materials if part.state else ()
         inventory_material = "Mixed" if slots else part.material
         inventory_copied = part.state.copied_material if part.state else None
-        material_key = (part.identity, inventory_material, inventory_copied, slots)
+        material_key = (
+            part.identity,
+            inventory_material,
+            inventory_copied,
+            slots,
+            record.type_key if record else None,
+        )
         placement = part.source_cell
         if placement is None or placement not in counted:
             inventory[material_key] = inventory.get(material_key, 0) + 1
@@ -58,9 +79,11 @@ def preview(scene, offset=(0, 0, 0), textures=None):
                 "matrices": [],
                 "colors": [],
                 "block_indices": [],
+                "source_ids": [],
             },
         )
         group["block_indices"].append(block_ids[identity])
+        group["source_ids"].append(record.id if record else None)
         hull_vertices = vertices(part.shape)
         if hull_vertices and "vertices" not in group:
             group["vertices"] = list(hull_vertices)
@@ -82,6 +105,8 @@ def preview(scene, offset=(0, 0, 0), textures=None):
         ),
     }
     return {
+        "source_hash": scene.source_hash,
+        "records": list(records.values()),
         "texture_coverage": coverage,
         "groups": list(groups.values()),
         "blocks": blocks,
@@ -91,6 +116,7 @@ def preview(scene, offset=(0, 0, 0), textures=None):
                 "material": material,
                 "properties": {},
                 "count": count,
+                **({"type_key": type_key} if type_key else {}),
                 **(
                     {
                         "copied_materials": [
@@ -107,7 +133,7 @@ def preview(scene, offset=(0, 0, 0), textures=None):
                     else {}
                 ),
             }
-            for (name, material, copied, slots), count in sorted(
+            for (name, material, copied, slots, type_key), count in sorted(
                 inventory.items(), key=lambda item: (-item[1], item[0][0], str(item[0][2]))
             )
         ],

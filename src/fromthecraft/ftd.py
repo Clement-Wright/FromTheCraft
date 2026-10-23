@@ -1,4 +1,5 @@
 import json
+import hashlib
 import re
 from collections import Counter
 from pathlib import Path
@@ -8,7 +9,7 @@ import numpy as np
 from .catalog import game_assets, installed_catalog
 from .geometry import quaternion, rotation
 from .ftd_shapes import native_shape
-from .model import MAX_PARTS, Part, Scene
+from .model import MAX_PARTS, Part, Scene, SourceRecord
 
 DATA = Path(__file__).with_name("data")
 CATALOG = json.loads((DATA / "ftd_blocks.json").read_text())
@@ -75,9 +76,10 @@ def read_blueprint(content: bytes) -> Scene:
         raise ValueError("Blueprint and ItemDictionary must be JSON objects")
     parts, notices = [], Counter()
     records = 0
+    source_hash = hashlib.sha256(content).hexdigest()
     colors = [vector(c, 4) for c in root.get("COL", [])]
 
-    def visit(construct, parent, depth):
+    def visit(construct, parent, depth, path=("Blueprint",)):
         nonlocal records
         if depth > 32:
             raise ValueError("Blueprint construct nesting exceeds 32")
@@ -93,8 +95,8 @@ def read_blueprint(content: bytes) -> Scene:
             raise ValueError("Blueprint block-array length mismatch")
         if records > MAX_PARTS:
             raise ValueError(f"Blueprint exceeds {MAX_PARTS:,} blocks")
-        for position, rot, block_id, paint in zip(
-            construct["BLP"], construct["BLR"], construct["BlockIds"], construct["BCI"]
+        for index, (position, rot, block_id, paint) in enumerate(
+            zip(construct["BLP"], construct["BLR"], construct["BlockIds"], construct["BCI"])
         ):
             guid = items.get(str(block_id), str(block_id))
             entry = CATALOG.get(guid)
@@ -125,7 +127,20 @@ def read_blueprint(content: bytes) -> Scene:
             )
             world = transform @ local
             world[:3, 3] += 0.5
-            parts.append(Part(entry["Name"], shape, size, world, material, tuple(color), material == "Glass"))
+            record_path = path + ("blocks", str(index))
+            record = SourceRecord(f"{source_hash}:{'/'.join(record_path)}", guid, "block", record_path, path)
+            parts.append(
+                Part(
+                    entry["Name"],
+                    shape,
+                    size,
+                    world,
+                    material,
+                    tuple(color),
+                    material == "Glass",
+                    source_record=record,
+                )
+            )
             if policy == "approximated":
                 notices[
                     f"Approximated FtD {shape if shape != 'box' else 'known footprint'}: {entry['Name']}"
@@ -138,14 +153,14 @@ def read_blueprint(content: bytes) -> Scene:
             notices[
                 "Intentionally skipped block/vehicle payloads, including mechanisms and possible decoration overlays"
             ] += 1
-        for child in construct.get("SCs", []):
-            visit(child, transform, depth + 1)
+        for index, child in enumerate(construct.get("SCs", [])):
+            visit(child, transform, depth + 1, path + ("SCs", str(index)))
 
     try:
         visit(root, np.eye(4), 0)
     except (KeyError, TypeError, IndexError, OverflowError) as exc:
         raise ValueError(f"Malformed blueprint block data: {exc}") from exc
-    return Scene(parts, "blueprint", notices, str(root.get("GameVersion", "unknown")))
+    return Scene(parts, "blueprint", notices, str(root.get("GameVersion", "unknown")), source_hash)
 
 
 def write_blueprint(cells, name="FromTheCraft"):

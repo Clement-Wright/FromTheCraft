@@ -18,6 +18,16 @@ class State:
     copied_materials: tuple[tuple[str, "State"], ...] = ()
 
 
+@dataclass(frozen=True)
+class SourceRecord:
+    id: str
+    type_key: str
+    kind: str
+    path: tuple[str, ...]
+    parent_path: tuple[str, ...]
+    host_id: str | None = None
+
+
 @dataclass
 class Part:
     identity: str
@@ -30,6 +40,9 @@ class Part:
     state: State | None = None
     source_cell: tuple[int, int, int] | None = None
     material_slot: str | None = None
+    source_record: SourceRecord | None = None
+    mapping_override: State | None = None
+    mapping_full: bool = False
 
 
 @dataclass
@@ -38,6 +51,7 @@ class Scene:
     format: str
     notices: Counter = field(default_factory=Counter)
     version: str = ""
+    source_hash: str = ""
 
 
 @dataclass

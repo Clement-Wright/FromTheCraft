@@ -1,4 +1,5 @@
 import gzip
+import hashlib
 import io
 import struct
 from collections import Counter
@@ -9,7 +10,7 @@ from litemapy import BlockState, Region, Schematic, TileEntity
 
 from .compatibility import MOD_STATES
 from .geometry import checked_size
-from .model import DATA_VERSION, MAX_PARTS, MAX_VOLUME, Part, Scene, State
+from .model import DATA_VERSION, MAX_PARTS, MAX_VOLUME, Part, Scene, State, SourceRecord
 from .palettes import mc_material, mc_policy, validate_state
 from .copycats import block_entity, block_state_tag, geometry_boxes, read_material
 
@@ -106,25 +107,45 @@ def write_structure(cells: dict, size) -> bytes:
 def read_structure(content: bytes):
     root = parse_nbt(content)
     notices = Counter()
-    cells = {}
+    cells, records = {}, {}
+    entries = []
+    source_hash = hashlib.sha256(content).hexdigest()
     try:
         check_version(root["DataVersion"])
         checked_size(root["size"])
         if len(root["blocks"]) > MAX_PARTS:
             raise ValueError(f"Input exceeds {MAX_PARTS:,} block records")
-        for block in root["blocks"]:
+        for index_record, block in enumerate(root["blocks"]):
             index = int(block["state"])
             if not 0 <= index < len(root["palette"]):
                 raise ValueError("Structure palette index out of range")
             pos = tuple(int(n) for n in block["pos"])
             if len(pos) != 3 or any(abs(n) > 100_000 for n in pos):
                 raise ValueError("Invalid structure block position")
-            accept(cells, pos, BlockState.from_nbt(root["palette"][index]), notices, block.get("nbt"))
+            one = {}
+            accept(one, pos, BlockState.from_nbt(root["palette"][index]), notices, block.get("nbt"))
+            record_path = ("blocks", str(index_record))
+            records.setdefault(
+                pos,
+                SourceRecord(
+                    f"{source_hash}:{'/'.join(record_path)}",
+                    str(root["palette"][index]["Name"]),
+                    "block",
+                    record_path,
+                    (),
+                ),
+            )
+            if one:
+                record = SourceRecord(
+                    f"{source_hash}:{'/'.join(record_path)}", one[pos].name, "block", record_path, ()
+                )
+                entries.append((pos, one[pos], record))
+                cells.setdefault(pos, one[pos])
         if root.get("entities"):
             notices["Intentionally skipped entities"] += len(root["entities"])
     except (KeyError, TypeError, IndexError) as exc:
         raise ValueError(f"Malformed structure NBT: {exc}") from exc
-    return scene_from_cells(cells, "nbt", notices)
+    return scene_from_cells(cells, "nbt", notices, records, source_hash, entries)
 
 
 def check_version(version):
@@ -168,9 +189,15 @@ def accept(cells, position, block, notices, entity=None):
         notices[f"Approximated {family}: {state.name}"] += 1
 
 
-def scene_from_cells(cells, format, notices):
+def scene_from_cells(cells, format, notices, records=None, source_hash="", entries=None):
     parts = []
-    for position, state in cells.items():
+    source_entries = (
+        entries
+        if entries is not None
+        else ((pos, state, (records or {}).get(pos)) for pos, state in cells.items())
+    )
+    for position, state, record in source_entries:
+        start = len(parts)
         boxes = geometry_boxes(state)
         if boxes is not None:
             appearances = dict(state.copied_materials)
@@ -194,6 +221,7 @@ def scene_from_cells(cells, format, notices):
                         slot,
                     )
                 )
+                parts[-1].source_record = record
                 if len(parts) > MAX_PARTS:
                     raise ValueError(f"Input exceeds {MAX_PARTS:,} render parts")
             continue
@@ -255,7 +283,9 @@ def scene_from_cells(cells, format, notices):
         parts.append(
             Part(state.name, shape, size, transform, material, color, material == "Glass", state, position)
         )
-    return Scene(parts, format, notices, str(DATA_VERSION))
+        for part in parts[start:]:
+            part.source_record = record
+    return Scene(parts, format, notices, str(DATA_VERSION), source_hash)
 
 
 def read_litematic(content):
@@ -271,24 +301,45 @@ def read_litematic(content):
         if volume > MAX_VOLUME:
             raise ValueError("Combined Litematic region volume exceeds limit")
         schematic = Schematic.from_nbt(root)
-        cells, notices = {}, Counter()
-        for region in schematic.regions.values():
+        cells, notices, records = {}, Counter(), {}
+        entries = []
+        source_hash = hashlib.sha256(content).hexdigest()
+        for name, region in schematic.regions.items():
             minimum = (region.min_x(), region.min_y(), region.min_z())
             entities = {
                 tuple(coordinate + low for coordinate, low in zip(entity.position, minimum)): entity.data
                 for entity in region.tile_entities
             }
             for x, y, z in region.block_positions():
+                one = {}
                 accept(
-                    cells,
+                    one,
                     (region.x + x, region.y + y, region.z + z),
                     region[x, y, z],
                     notices,
                     entities.get((x, y, z)),
                 )
+                position = (region.x + x, region.y + y, region.z + z)
+                if position in one:
+                    record_path = ("Regions", name, f"{x},{y},{z}")
+                    record = SourceRecord(
+                        f"{source_hash}:{'/'.join(record_path)}",
+                        one[position].name,
+                        "block",
+                        record_path,
+                        ("Regions", name),
+                    )
+                    entries.append((position, one[position], record))
+                    if position in cells:
+                        notices[
+                            "Overlapping source records retained; first contributor owns conversion material"
+                        ] += 1
+                    cells.setdefault(position, one[position])
+                    if len(entries) > MAX_PARTS:
+                        raise ValueError(f"Input exceeds {MAX_PARTS:,} block records")
             if region.entities:
                 notices["Intentionally skipped entities"] += len(region.entities)
-        return scene_from_cells(cells, "litematic", notices)
+        return scene_from_cells(cells, "litematic", notices, records, source_hash, entries)
     except (KeyError, TypeError, IndexError) as exc:
         raise ValueError(f"Malformed Litematic: {exc}") from exc
 
