@@ -1,4 +1,5 @@
 export type BlockIdentity = {
+  type_key?: string;
   name: string;
   material: string;
   properties: Record<string, string>;
@@ -34,6 +35,8 @@ export type ModChoice = {
 };
 
 export type Display = {
+  source_hash?: string;
+  records?: SourceRecord[];
   texture_coverage?: {
     resolved_faces: number;
     missing_faces: number;
@@ -47,6 +50,7 @@ export type Display = {
     matrices: number[];
     colors: number[];
     block_indices: number[];
+    source_ids?: (string | null)[];
     vertices?: number[];
   }[];
   count: number;
@@ -54,6 +58,27 @@ export type Display = {
   dimensions: number[];
   format: string;
   version: string;
+};
+
+export type SourceRecord = {
+  id: string;
+  type_key: string;
+  kind: string;
+  path: string[];
+  parent_path: string[];
+  host_id?: string | null;
+  name: string;
+};
+export type EditSnapshot = {
+  revision: number;
+  excluded: string[];
+  hidden: string[];
+  mappings: Record<
+    string,
+    { name: string; properties: Record<string, string>; full_block: boolean }
+  >;
+  can_undo: boolean;
+  can_redo: boolean;
 };
 
 export type Status = {

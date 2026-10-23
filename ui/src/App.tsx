@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import PairedViewer from "./viewer/PairedViewer";
 import Materials from "./Materials";
 import ModPicker from "./ModPicker";
+import SourceEditor, { type EditCommand } from "./SourceEditor";
+import type { EditSnapshot } from "./types";
 import type { Display, ModChoice, Status, TextureStatus } from "./types";
 
 const labels: Record<string, string> = {
@@ -18,6 +20,11 @@ const labels: Record<string, string> = {
 
 export default function App() {
   const [source, setSource] = useState<Display>();
+  const [edits, setEdits] = useState<EditSnapshot>();
+  const [selected, setSelected] = useState<string[]>([]);
+  const [candidates, setCandidates] = useState<string[]>([]);
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState("");
   const [status, setStatus] = useState<Status>({
     state: "empty",
     progress: 0,
@@ -118,6 +125,10 @@ export default function App() {
     if (!file || !initialized) return;
     const current = ++generation.current;
     setSource(undefined);
+    setSelected([]);
+    setCandidates([]);
+    setEdits(undefined);
+    setEditError("");
     sourceRef.current = undefined;
     setSourceNotices({});
     setFilename(file.name);
@@ -128,6 +139,7 @@ export default function App() {
       const parsed = await mutate(() => request("/api/source", body));
       if (current !== generation.current) return;
       setSource(parsed.source);
+      setEdits(parsed.edits);
       sourceRef.current = parsed.source;
       setSourceNotices(parsed.notices);
       setFormat(parsed.source.format === "blueprint" ? "nbt" : "blueprint");
@@ -238,6 +250,86 @@ export default function App() {
     }
   }
 
+  async function changeEdit(
+    command?: EditCommand,
+    direction?: "undo" | "redo",
+  ) {
+    if (editBusy) return;
+    setEditBusy(true);
+    setEditError("");
+    const current = generation.current;
+    try {
+      const response = await mutate(() =>
+        request(
+          direction ? `/api/edits/${direction}` : "/api/edits",
+          command ? JSON.stringify(command) : undefined,
+          !!command,
+        ),
+      );
+      if (current !== generation.current) return;
+      setEdits(response.edits);
+      if (response.invalidated) {
+        ++generation.current;
+        setStatus({ state: "stale", progress: 0, error: "" });
+      }
+    } catch (problem) {
+      setEditError((problem as Error).message);
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    const historyKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement;
+      if (
+        target.closest("input,textarea,select,[contenteditable=true]") ||
+        editBusy
+      )
+        return;
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const key = event.key.toLowerCase();
+      const direction =
+        key === "y" || (key === "z" && event.shiftKey)
+          ? "redo"
+          : key === "z"
+            ? "undo"
+            : undefined;
+      if (
+        direction &&
+        edits?.[direction === "undo" ? "can_undo" : "can_redo"]
+      ) {
+        event.preventDefault();
+        void changeEdit(undefined, direction);
+      }
+    };
+    window.addEventListener("keydown", historyKey);
+    return () => window.removeEventListener("keydown", historyKey);
+  }, [edits, editBusy]);
+
+  const hiddenKey = (edits?.hidden ?? []).join("\n");
+  const visibleSource = useMemo(() => {
+    if (!source || !hiddenKey) return source;
+    const hidden = new Set(hiddenKey.split("\n"));
+    return {
+      ...source,
+      groups: source.groups.map((group) => {
+        const keep = group.block_indices
+          .map((_, i) => i)
+          .filter((i) => !hidden.has(group.source_ids?.[i] ?? ""));
+        return {
+          ...group,
+          matrices: keep.flatMap((i) =>
+            group.matrices.slice(i * 16, i * 16 + 16),
+          ),
+          colors: keep.flatMap((i) => group.colors.slice(i * 3, i * 3 + 3)),
+          block_indices: keep.map((i) => group.block_indices[i]),
+          source_ids: keep.map((i) => group.source_ids?.[i] ?? null),
+        };
+      }),
+    };
+  }, [source, hiddenKey]);
+
   async function download() {
     const current = generation.current;
     try {
@@ -343,7 +435,9 @@ export default function App() {
         <button
           className="primary"
           disabled={
-            !status.result_id || !["ready", "exported"].includes(status.state)
+            editBusy ||
+            !status.result_id ||
+            !["ready", "exported"].includes(status.state)
           }
           onClick={() => void download()}
         >
@@ -580,13 +674,28 @@ export default function App() {
             <span className="scale-label">Output {scale}×</span>
           </div>
           <PairedViewer
-            source={source}
+            source={visibleSource}
             converted={status.converted}
             linked={linked}
             view={view}
             reset={reset}
             displayTextures={displayTextures}
             textureToken={token.current}
+            onSelect={(ids, additive) => {
+              setCandidates(ids);
+              const id = ids[0];
+              setSelected((previous) =>
+                !id
+                  ? []
+                  : additive
+                    ? previous.includes(id)
+                      ? previous.filter((v) => v !== id)
+                      : [...previous, id]
+                    : [id],
+              );
+            }}
+            selectedIds={selected}
+            excludedIds={edits?.excluded}
           />
           <div className="preview-context">
             <span>
@@ -615,7 +724,7 @@ export default function App() {
           {displayTextures &&
             status.converted?.texture_coverage &&
             status.converted.texture_coverage.missing_faces > 0 && (
-              <p className="source-notice" role="status">
+              <p className="source-notice">
                 Minecraft preview is missing textures for{" "}
                 {status.converted.texture_coverage.missing_blocks.length} block
                 types. Load your Minecraft 1.21.1 client JAR and the JARs for
@@ -638,7 +747,28 @@ export default function App() {
             source={source}
             converted={status.converted}
             stale={status.state === "stale"}
+            onSelectType={(key) => {
+              setSelected(
+                source?.records
+                  ?.filter((r) => r.type_key === key)
+                  .map((r) => r.id) ?? [],
+              );
+              setCandidates([]);
+            }}
           />
+          {source && (
+            <SourceEditor
+              records={source.records ?? []}
+              selected={selected}
+              onSelect={setSelected}
+              edits={edits}
+              onEdit={(command) => void changeEdit(command)}
+              onHistory={(direction) => void changeEdit(undefined, direction)}
+              busy={editBusy}
+              candidates={candidates}
+              error={editError}
+            />
+          )}
         </section>
       </div>
       <section className={`status-area ${status.state}`} aria-live="polite">

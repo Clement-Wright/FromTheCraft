@@ -134,6 +134,7 @@ type View = {
   controls: OrbitControls;
   render: () => void;
   renderer: T.WebGLRenderer;
+  highlight?: () => void;
 };
 type Props = {
   source?: Display;
@@ -143,6 +144,9 @@ type Props = {
   reset: number;
   displayTextures?: boolean;
   textureToken?: string;
+  onSelect?: (ids: string[], additive: boolean) => void;
+  selectedIds?: string[];
+  excludedIds?: string[];
 };
 
 export default function PairedViewer({
@@ -153,6 +157,9 @@ export default function PairedViewer({
   reset,
   displayTextures = false,
   textureToken = "",
+  onSelect,
+  selectedIds = [],
+  excludedIds = [],
 }: Props) {
   const hosts = [useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null)];
   const views = useRef<View[]>([]);
@@ -160,6 +167,19 @@ export default function PairedViewer({
   const [error, setError] = useState("");
   const [hovered, setHovered] = useState<(HoveredBlock | undefined)[]>([]);
   linkedRef.current = linked;
+  const selectRef = useRef(onSelect);
+  selectRef.current = onSelect;
+  const editorRef = useRef({
+    selected: new Set(selectedIds),
+    excluded: new Set(excludedIds),
+  });
+  editorRef.current = {
+    selected: new Set(selectedIds),
+    excluded: new Set(excludedIds),
+  };
+  useEffect(() => {
+    views.current[0]?.highlight?.();
+  }, [selectedIds, excludedIds]);
 
   useEffect(() => {
     setHovered([]);
@@ -285,6 +305,11 @@ export default function PairedViewer({
           if (!disposed && activeImages === 0 && textureQueue.length === 0)
             renderer.render(scene, camera);
         };
+        const sourceMeshes: {
+          mesh: T.InstancedMesh;
+          ids: (string | null)[];
+          colors: T.Color[];
+        }[] = [];
         for (const group of models[index]?.groups ?? []) {
           const geometry = group.vertices
             ? new ConvexGeometry(
@@ -376,11 +401,27 @@ export default function PairedViewer({
               mesh.setColorAt(i, color);
             }
             mesh.instanceMatrix.needsUpdate = true;
+            if (index === 0)
+              sourceMeshes.push({
+                mesh,
+                ids: batch.instances.map((i) => group.source_ids?.[i] ?? null),
+                colors: batch.instances.map((i) =>
+                  new T.Color().setRGB(
+                    group.colors[i * 3],
+                    group.colors[i * 3 + 1],
+                    group.colors[i * 3 + 2],
+                    T.SRGBColorSpace,
+                  ),
+                ),
+              });
             mesh.computeBoundingSphere();
             scene.add(mesh);
             picker.add(
               mesh,
               batch.instances.map((instance) => group.block_indices[instance]),
+              batch.instances.map(
+                (instance) => group.source_ids?.[instance] ?? null,
+              ),
             );
             resources.push(mesh, ...materials);
           }
@@ -451,7 +492,24 @@ export default function PairedViewer({
         controls.update();
         const render = () => renderer.render(scene, camera);
         const current: View = { camera, controls, render, renderer };
+        current.highlight = () => {
+          for (const { mesh, ids, colors } of sourceMeshes) {
+            ids.forEach((id, i) =>
+              mesh.setColorAt(
+                i,
+                id && editorRef.current.selected.has(id)
+                  ? new T.Color("#45b873")
+                  : id && editorRef.current.excluded.has(id)
+                    ? new T.Color("#c47a56")
+                    : colors[i],
+              ),
+            );
+            if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+          }
+          render();
+        };
         views.current[index] = current;
+        if (index === 0) current.highlight();
         let pendingPick = 0;
         let selectedKey = "";
         let pointerX = 0;
@@ -512,6 +570,40 @@ export default function PairedViewer({
           pointerY = rectangle.top + rectangle.height / 2;
           inspect();
         };
+        let downX = 0,
+          downY = 0;
+        const startClick = (event: PointerEvent) => {
+          downX = event.clientX;
+          downY = event.clientY;
+        };
+        const selectClick = (event: PointerEvent) => {
+          if (
+            index !== 0 ||
+            event.button !== 0 ||
+            Math.hypot(event.clientX - downX, event.clientY - downY) > 4
+          )
+            return;
+          const rect = renderer.domElement.getBoundingClientRect();
+          const hits = picker.pickAll(
+            new T.Vector2(
+              ((event.clientX - rect.left) / rect.width) * 2 - 1,
+              (-(event.clientY - rect.top) / rect.height) * 2 + 1,
+            ),
+            camera,
+          );
+          selectRef.current?.(
+            [
+              ...new Set(
+                hits
+                  .map((hit) => hit.block.source_id)
+                  .filter((id): id is string => !!id),
+              ),
+            ],
+            event.ctrlKey || event.metaKey,
+          );
+        };
+        renderer.domElement.addEventListener("pointerdown", startClick);
+        renderer.domElement.addEventListener("pointerup", selectClick);
         renderer.domElement.addEventListener("pointermove", move);
         renderer.domElement.addEventListener("pointerleave", clearHover);
         renderer.domElement.addEventListener("pointerdown", clearHover);
@@ -560,6 +652,8 @@ export default function PairedViewer({
           disposed = true;
           window.cancelAnimationFrame(pendingPick);
           renderer.domElement.removeEventListener("pointermove", move);
+          renderer.domElement.removeEventListener("pointerdown", startClick);
+          renderer.domElement.removeEventListener("pointerup", selectClick);
           renderer.domElement.removeEventListener("pointerleave", clearHover);
           renderer.domElement.removeEventListener("pointerdown", clearHover);
           renderer.domElement.removeEventListener("keydown", inspectKey);

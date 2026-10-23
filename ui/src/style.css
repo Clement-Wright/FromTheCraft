@@ -7,6 +7,49 @@
   font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
+.source-editor {
+  padding: 16px 20px;
+  border-top: 1px solid #cbd3cc;
+  background: #f4f6f2;
+}
+.editor-heading,
+.editor-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.editor-heading h2 {
+  margin: 0 12px 0 0;
+  font-size: 15px;
+}
+.editor-heading span {
+  color: #526457;
+  font-variant-numeric: tabular-nums;
+}
+.editor-hint {
+  color: #526457;
+  max-width: 85ch;
+}
+.record-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 180px;
+  overflow: auto;
+  gap: 4px;
+}
+.record-list button {
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+button.material-select {
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 4px 8px;
+  margin-left: -8px;
+  font-weight: 600;
+}
 * {
   box-sizing: border-box;
 }

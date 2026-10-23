@@ -1,13 +1,17 @@
 import * as T from "three";
 import type { BlockIdentity, Display } from "../types";
 
-export type HoveredBlock = BlockIdentity & { coordinate: number[] };
+export type HoveredBlock = BlockIdentity & {
+  coordinate: number[];
+  source_id?: string | null;
+};
 type Entry = {
   mesh: T.InstancedMesh;
   proxy: T.Mesh;
   instance: number;
   block: number;
   bounds: T.Box3;
+  sourceId?: string | null;
 };
 type Bucket = { bounds: T.Box3; entries: Entry[] };
 
@@ -24,7 +28,11 @@ export class BlockPicker {
     this.size = Math.max(1, ...(model?.dimensions ?? [1])) / 24;
   }
 
-  add(mesh: T.InstancedMesh, blockIndices: number[]) {
+  add(
+    mesh: T.InstancedMesh,
+    blockIndices: number[],
+    sourceIds: (string | null)[] = [],
+  ) {
     mesh.geometry.computeBoundingBox();
     const proxy = new T.Mesh(mesh.geometry, mesh.material);
     proxy.matrixAutoUpdate = false;
@@ -49,6 +57,7 @@ export class BlockPicker {
         instance,
         block: blockIndices[instance],
         bounds,
+        sourceId: sourceIds[instance],
       });
     }
   }
@@ -57,9 +66,15 @@ export class BlockPicker {
     pointer: T.Vector2,
     camera: T.Camera,
   ): { block: HoveredBlock; bounds: T.Box3 } | undefined {
+    return this.pickAll(pointer, camera)[0];
+  }
+
+  pickAll(
+    pointer: T.Vector2,
+    camera: T.Camera,
+  ): { block: HoveredBlock; bounds: T.Box3 }[] {
     this.raycaster.setFromCamera(pointer, camera);
-    let closest = Infinity;
-    let selected: Entry | undefined;
+    const selected: { entry: Entry; distance: number }[] = [];
     const hits: T.Intersection[] = [];
     for (const bucket of this.buckets.values()) {
       if (!this.raycaster.ray.intersectsBox(bucket.bounds)) continue;
@@ -69,26 +84,32 @@ export class BlockPicker {
         entry.proxy.matrixWorld.copy(this.matrix);
         hits.length = 0;
         entry.proxy.raycast(this.raycaster, hits);
-        for (const hit of hits) {
-          if (hit.distance < closest) {
-            closest = hit.distance;
-            selected = entry;
-          }
-        }
+        if (hits.length)
+          selected.push({
+            entry,
+            distance: Math.min(...hits.map((hit) => hit.distance)),
+          });
       }
     }
-    if (!selected) return;
-    const identity = this.model?.blocks[selected.block];
-    if (!identity) return;
-    selected.mesh.getMatrixAt(selected.instance, this.matrix);
-    return {
-      block: {
-        ...identity,
-        coordinate: this.matrix.elements
-          .slice(12, 15)
-          .map((n) => (Math.abs(n) < 1e-6 ? 0 : Number(n.toFixed(3)))),
-      },
-      bounds: selected.bounds,
-    };
+    return selected
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 128)
+      .flatMap(({ entry }) => {
+        const identity = this.model?.blocks[entry.block];
+        if (!identity) return [];
+        entry.mesh.getMatrixAt(entry.instance, this.matrix);
+        return [
+          {
+            block: {
+              ...identity,
+              source_id: entry.sourceId,
+              coordinate: this.matrix.elements
+                .slice(12, 15)
+                .map((n) => (Math.abs(n) < 1e-6 ? 0 : Number(n.toFixed(3)))),
+            },
+            bounds: entry.bounds,
+          },
+        ];
+      });
   }
 }

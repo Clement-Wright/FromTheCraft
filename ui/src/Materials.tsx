@@ -6,10 +6,12 @@ export default function Materials({
   source,
   converted,
   stale,
+  onSelectType,
 }: {
   source?: Display;
   converted?: Display;
   stale: boolean;
+  onSelectType?: (key: string) => void;
 }) {
   const [selected, setSelected] = useState("converted");
   const [search, setSearch] = useState("");
@@ -116,10 +118,22 @@ export default function Materials({
               <tbody>
                 {filtered.map((item) => (
                   <tr
-                    key={`${item.name}:${item.material}:${JSON.stringify(item.properties)}:${JSON.stringify(item.copied_material)}:${JSON.stringify(item.copied_materials)}`}
+                    key={`${item.type_key}:${item.name}:${item.material}:${JSON.stringify(item.properties)}:${JSON.stringify(item.copied_material)}:${JSON.stringify(item.copied_materials)}`}
                   >
                     <td>
-                      <strong>{item.name}</strong>
+                      {selected === "source" &&
+                      item.type_key &&
+                      onSelectType ? (
+                        <button
+                          className="material-select"
+                          aria-label={`Select all ${item.name}`}
+                          onClick={() => onSelectType(item.type_key!)}
+                        >
+                          {item.name}
+                        </button>
+                      ) : (
+                        <strong>{item.name}</strong>
+                      )}
                       <span>
                         {item.material}
                         {Object.entries(item.properties)
