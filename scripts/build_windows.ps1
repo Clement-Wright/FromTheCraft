@@ -21,11 +21,10 @@ if ($LASTEXITCODE -ne 0) { throw 'License collection failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Windows packaging failed.' }
 Copy-Item -LiteralPath README.md -Destination (Join-Path $portableFolder 'README.md')
 Copy-Item -LiteralPath COPYING -Destination (Join-Path $portableFolder 'COPYING')
-New-Item -ItemType Directory -Path (Join-Path $portableFolder 'docs/images') -Force | Out-Null
-Copy-Item -LiteralPath docs/implementation.md -Destination (Join-Path $portableFolder 'docs/implementation.md')
-Copy-Item -LiteralPath docs/mod-compatibility.md -Destination (Join-Path $portableFolder 'docs/mod-compatibility.md')
-Copy-Item -LiteralPath docs/images/workbench.png -Destination (Join-Path $portableFolder 'docs/images/workbench.png')
-Copy-Item -LiteralPath docs/images/slopes-copycats.png -Destination (Join-Path $portableFolder 'docs/images/slopes-copycats.png')
+New-Item -ItemType Directory -Path (Join-Path $portableFolder 'assets/readme') -Force | Out-Null
+Copy-Item -LiteralPath MOD_COMPATIBILITY.md -Destination (Join-Path $portableFolder 'MOD_COMPATIBILITY.md')
+Copy-Item -LiteralPath assets/readme/workbench.png -Destination (Join-Path $portableFolder 'assets/readme/workbench.png')
+Copy-Item -LiteralPath assets/readme/slopes-copycats.png -Destination (Join-Path $portableFolder 'assets/readme/slopes-copycats.png')
 Copy-Item -LiteralPath examples -Destination $portableFolder -Recurse
 Write-Host "Portable application: $portableFolder\FromTheCraft.exe"
 Write-Host 'Keep the entire FromTheCraft folder together.'

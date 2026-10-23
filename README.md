@@ -4,7 +4,7 @@ Convert structures between From the Depths `.blueprint` files and Minecraft Java
 
 FromTheCraft runs locally on Windows. It converts hulls, decks and building materials.
 
-![FromTheCraft showing the included demo hull, linked previews, a hovered block and material counts](docs/images/workbench.png)
+![FromTheCraft showing the included demo hull, linked previews, a hovered block and material counts](assets/readme/workbench.png)
 
 ## Download and run
 
@@ -40,7 +40,7 @@ The palette contains **798 measured full blocks and 375 matching slab/stair vari
 
 Detailed Copycats rounds partial shapes outward to retain the sampled hull, including thin slope tips. This avoids holes caused by choosing a smaller piece with a similar volume. Some edges become thicker at Minecraft's block resolution; the result remains an approximation.
 
-The inspector and build list show each copycat's **Applied material**, with separate searchable rows for different materials. Counts describe exported blocks, not survival crafting costs. The exported NBT includes the applied material state and the inspected consumed-item fields. See [mod versions and format checks](docs/mod-compatibility.md) for the exact profiles and unverified in-game behavior.
+The inspector and build list show each copycat's **Applied material**, with separate searchable rows for different materials. Counts describe exported blocks, not survival crafting costs. The exported NBT includes the applied material state and the inspected consumed-item fields. See [mod versions and format checks](MOD_COMPATIBILITY.md) for the exact profiles and unverified in-game behavior.
 
 ### Preview textures
 
