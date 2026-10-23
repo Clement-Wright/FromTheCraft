@@ -34,7 +34,7 @@ Leave **Installed mods** at **Vanilla only** for vanilla building blocks. If a s
 
 For modded output, open **Installed mods** and check the mods in your pack. The profile targets **Minecraft 1.21.1, NeoForge and Create 6.0.10**. It includes Copycats+, Design n' Decor, Create: Chipped, Encased, Deco, Chipped, and Bells & Whistles. Dependencies are selected automatically. FromTheCraft doesn't install mods.
 
-The palette contains **798 measured full blocks and 375 matching slab/stair variants**: 228 vanilla full blocks and 570 across Create and its add-ons. It includes varied stone, wood, concrete, terracotta, wool, metal and static casings. Material first keeps the source material family. Balanced preserves wood and favors other matching material families; Color first chooses the closest measured color.
+The palette contains **1,237 measured full blocks and 375 matching slab/stair variants**: 237 vanilla full blocks and 1,000 across Create and its add-ons. It includes varied stone, wood, concrete, terracotta, wool, metal and static casings. Material first keeps the source material family. Balanced preserves wood and favors other matching material families; Color first chooses the closest measured color.
 
 **Create: Copycats+** applies the selected material to copycat stairs and slabs. Enable **Detailed Copycats** for finer sampled shapes using eighth-block layers, panels, half panels, byte-panel quadrants, half-block byte octants, independently adjustable half layers, slices, boards, beams and vertical steps. It requires Copycats+ and Minecraft output, and is off by default. The pinned profile has no verified Copycat Wing block.
 

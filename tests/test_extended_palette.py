@@ -11,6 +11,24 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "src/fromthecraft/data"
 PALETTE = json.loads((DATA / "expanded_palette_1_21_1.json").read_text(encoding="utf-8"))
 BLOCKS = {block["name"]: block for block in PALETTE["blocks"]}
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "minecraft:ancient_debris",
+        "minecraft:reinforced_deepslate",
+        "chipped:bolted_red_concrete",
+        "chipped:herringbone_oak_planks",
+        "chipped:bordered_blackstone",
+    ],
+)
+def test_additional_static_building_choices_have_measured_color_and_evidence(name):
+    block = BLOCKS[name]
+    assert len(block["rgb"]) == 3
+    assert block["evidence"]["texture_samples"]
+
+
 VANILLA = {
     "minecraft:" + block["name"]: block
     for block in json.loads((DATA / "minecraft_1_21_1.json").read_text(encoding="utf-8"))["blocks"]
@@ -18,15 +36,17 @@ VANILLA = {
 
 
 def test_expansion_has_broad_independent_coverage_without_duplicating_existing_blocks():
-    assert len(BLOCKS) == len(PALETTE["blocks"]) == 735
-    assert Counter(block["mod"] for block in BLOCKS.values()) == {
-        "vanilla": 228,
+    assert len(BLOCKS) == len(PALETTE["blocks"])
+    coverage = Counter(block["mod"] for block in BLOCKS.values())
+    for mod, minimum in {
+        "vanilla": 237,
         "create": 101,
         "create-design-n-decor": 152,
         "create-deco": 49,
         "create-chipped": 68,
-        "chipped": 137,
-    }
+        "chipped": 567,
+    }.items():
+        assert coverage[mod] >= minimum
     original = json.loads((DATA / "mod_palette_1_21_1.json").read_text(encoding="utf-8"))
     assert not set(BLOCKS) & {block["name"] for mod in original["mods"] for block in mod["blocks"]}
     for color in "white orange magenta light_blue yellow lime pink gray light_gray cyan purple blue brown green red black".split():

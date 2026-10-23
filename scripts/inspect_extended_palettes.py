@@ -153,6 +153,16 @@ def selected_names():
         "hay_block",
         "honeycomb_block",
         "snow_block",
+        "ancient_debris",
+        "reinforced_deepslate",
+        "gilded_blackstone",
+        "soul_soil",
+        "sponge",
+        "wet_sponge",
+        "melon",
+        "pumpkin",
+        "carved_pumpkin",
+        "jack_o_lantern",
     }
     vanilla.update(
         f"{c}_{kind}" for c in COLORS for kind in ("concrete", "wool", "terracotta", "glazed_terracotta")
@@ -219,6 +229,70 @@ def selected_names():
     }
     chipped.update(f"{prefix}_{c}_wool" for prefix in ("woven", "knitted", "bundled") for c in COLORS)
     chipped.update(f"{prefix}_{w}_planks" for prefix in ("boxed", "basket_woven", "vertical") for w in WOODS)
+    chipped.update(
+        f"{prefix}_{c}_concrete"
+        for c in COLORS
+        for prefix in (
+            "bolted",
+            "grid",
+            "grill",
+            "hazard",
+            "mosaic",
+            "pegged",
+            "railed",
+            "reinforced",
+            "rusted",
+            "smooth",
+            "stacked",
+            "striped",
+            "wired",
+        )
+    )
+    chipped.update(
+        f"{prefix}_{w}_planks"
+        for w in WOODS
+        for prefix in (
+            "brick_bond",
+            "crated",
+            "cross_laced",
+            "diagonal",
+            "double_herringbone",
+            "fine",
+            "framed",
+            "herringbone",
+            "nailed",
+            "polished",
+            "tiled",
+            "versailles",
+        )
+    )
+    chipped.update(
+        f"{prefix}_{stone}"
+        for stone in (
+            "blackstone",
+            "calcite",
+            "andesite",
+            "diorite",
+            "granite",
+            "prismarine",
+            "packed_mud",
+            "obsidian",
+        )
+        for prefix in (
+            "bordered",
+            "brick_bordered",
+            "carved",
+            "cut_blank",
+            "engraved",
+            "eroded",
+            "inlayed",
+            "inscribed",
+            "loded",
+            "sanded",
+            "smooth_inlayed",
+            "tiled_bordered",
+        )
+    )
     chipped.update(
         f"{prefix}_{s}"
         for prefix in ("polished", "tiled", "cobbled")
