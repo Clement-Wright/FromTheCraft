@@ -5,6 +5,8 @@ import ModPicker from "./ModPicker";
 import SourceEditor, { type EditCommand } from "./SourceEditor";
 import ViewFilters from "./ViewFilters";
 import { emptyFilter, type ViewFilter } from "./viewer/ViewFilter";
+import ProjectControls from "./ProjectControls";
+import BlockBrowser from "./BlockBrowser";
 import type { EditSnapshot } from "./types";
 import type { Display, ModChoice, Status, TextureStatus } from "./types";
 
@@ -281,6 +283,53 @@ export default function App() {
     } finally {
       setEditBusy(false);
     }
+  }
+
+  function settings() {
+    return {
+      format,
+      scale,
+      preference,
+      mods: format === "blueprint" ? [] : mods,
+      detailed_copycats:
+        format !== "blueprint" && mods.includes("copycats") && detailedCopycats,
+      hollow,
+      shell_thickness: shellThickness,
+    };
+  }
+
+  async function restoreProject(kind: "project" | "preset", document: unknown) {
+    const current = generation.current;
+    const response = await mutate(() =>
+      request(`/api/${kind}/open`, JSON.stringify(document), true),
+    );
+    if (current !== generation.current) return;
+    ++generation.current;
+    const s = response.settings;
+    setFormat(s.format);
+    setScale(s.scale);
+    setPreference(s.preference);
+    setMods(s.mods);
+    setDetailedCopycats(s.detailed_copycats);
+    setHollow(s.hollow);
+    setShellThickness(s.shell_thickness);
+    setEdits(response.edits);
+    setSelected([]);
+    setCandidates([]);
+    setEditError("");
+    if (kind === "project") {
+      const v = response.view;
+      if (
+        v.filter &&
+        ["", "x", "y", "z"].includes(v.filter.axis) &&
+        Number.isFinite(v.filter.lower) &&
+        Number.isFinite(v.filter.upper)
+      )
+        setFilter(v.filter);
+      if (typeof v.textures === "boolean") setDisplayTextures(v.textures);
+      if (typeof v.linked === "boolean") setLinked(v.linked);
+    }
+    setStatus({ state: "stale", progress: 0, error: "" });
   }
 
   useEffect(() => {
@@ -749,6 +798,22 @@ export default function App() {
             </p>
           )}
           <ViewFilters source={source} value={filter} onChange={setFilter} />
+          <ProjectControls
+            enabled={!!source && !busy && !editBusy}
+            save={(kind) =>
+              mutate(() =>
+                request(
+                  `/api/${kind}/save`,
+                  JSON.stringify({
+                    settings: settings(),
+                    view: { filter, textures: displayTextures, linked },
+                  }),
+                  true,
+                ),
+              )
+            }
+            open={restoreProject}
+          />
           <Materials
             source={source}
             converted={status.converted}
@@ -773,6 +838,16 @@ export default function App() {
               busy={editBusy}
               candidates={candidates}
               error={editError}
+            />
+          )}
+          {source && format !== "blueprint" && (
+            <BlockBrowser
+              mods={mods}
+              selected={selected}
+              token={token.current}
+              request={request}
+              onAssign={(command) => void changeEdit(command)}
+              busy={editBusy}
             />
           )}
         </section>

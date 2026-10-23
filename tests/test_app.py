@@ -78,6 +78,37 @@ def test_finishing_worker_cannot_publish_after_source_edit(client, monkeypatch):
     assert client.get("/api/export").status_code == 409
 
 
+def test_projects_presets_and_enabled_palette_are_validated_atomically(client):
+    import copy
+
+    source = upload(client).json()["source"]
+    record = source["records"][0]["id"]
+    client.post("/api/edits", json={"kind": "exclude", "ids": [record]})
+    project = client.post("/api/project/save", json={"settings": {"format": "nbt"}}).json()
+    client.post("/api/edits/undo")
+    assert client.post("/api/project/open", json=project).json()["edits"]["excluded"] == [record]
+    before = client.get("/api/edits").json()
+    bad = copy.deepcopy(project)
+    bad["settings"]["mods"] = ["missing"]
+    assert client.post("/api/project/open", json=bad).status_code == 400
+    assert client.get("/api/edits").json() == before
+    palette = client.get("/api/palette").json()["blocks"]
+    assert palette and all(b["name"].startswith("minecraft:") for b in palette)
+    mod_palette = client.get("/api/palette?mods=chipped").json()["blocks"]
+    target = next(b for b in mod_palette if b["name"].startswith("chipped:"))
+    mapping = {"name": target["name"], "properties": target["properties"]}
+    assert client.post("/api/palette/preview", json=mapping).json()["count"] == 1
+    client.post(
+        "/api/edits",
+        json={"kind": "mapping", "type_keys": [source["records"][0]["type_key"]], "mapping": mapping},
+    )
+    assert client.post("/api/project/save", json={"settings": {"format": "nbt"}}).status_code == 400
+    preset = client.post("/api/preset/save", json={"settings": {"format": "nbt", "mods": ["chipped"]}}).json()
+    assert "commands" not in preset and "source" not in preset
+    assert preset["type_mappings"][0]["mapping"]["name"] == target["name"]
+    assert client.post("/api/preset/open", json=preset).status_code == 200
+
+
 def test_preview_is_exact_exported_serialization(client):
     from fromthecraft.convert import read_file
     from fromthecraft.preview import preview

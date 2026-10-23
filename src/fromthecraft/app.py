@@ -24,6 +24,7 @@ from .preview import preview
 from .textures import TextureLibrary, MAX_ARCHIVE_BYTES
 from .compatibility import mod_choices, selected_mods
 from .edits import EditLayer
+from .projects import export_project, import_project
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
@@ -262,6 +263,7 @@ def redo_source(request: Request):
 
 
 class Options(BaseModel):
+    model_config = {"extra": "forbid"}
     format: Literal["nbt", "litematic", "blueprint"]
     scale: Literal[0.25, 0.5, 1, 2, 4] = 1
     preference: Literal["balanced", "material", "color"] = "balanced"
@@ -275,6 +277,165 @@ class Options(BaseModel):
     def known_mods(cls, value):
         selected_mods(value)
         return value
+
+
+def checked_settings(settings, scene, layer):
+    options = Options.model_validate(settings)
+    if options.format not in ({"nbt", "litematic"} if scene.format == "blueprint" else {"blueprint"}):
+        raise ValueError("Project output must target the other game")
+    from .compatibility import MODS
+
+    enabled = selected_mods(options.mods)
+    allowed = {b["name"] for slug in enabled for b in MODS[slug]["blocks"]}
+    for command in layer.commands:
+        mapping = command.get("mapping")
+        if mapping and not mapping["name"].startswith("minecraft:") and mapping["name"] not in allowed:
+            raise ValueError("Project mapping requires a disabled mod: " + mapping["name"])
+    return options.model_dump()
+
+
+@app.post("/api/project/save")
+def save_project(request: Request, document: dict):
+    session = session_for(request)
+    with session.lock:
+        if session.source is None:
+            raise HTTPException(409, "Open a source file first")
+        try:
+            settings = checked_settings(document.get("settings", {}), session.source, session.edits)
+            view = document.get("view", {})
+            if not isinstance(view, dict):
+                raise ValueError("Invalid view settings")
+            return export_project(session.source, session.edits, session.filename, settings, view)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/api/project/open")
+def open_project(request: Request, document: dict):
+    session = session_for(request)
+    with session.lock:
+        if session.source is None:
+            raise HTTPException(409, "Open the original source file before its project")
+        try:
+            layer, settings, view = import_project(document, session.source)
+            settings = checked_settings(settings, session.source, layer)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        session.edits = layer
+        session.invalidate()
+        return {"edits": layer.snapshot(), "settings": settings, "view": view}
+
+
+@app.get("/api/palette")
+def palette(request: Request, mods: str = ""):
+    session_for(request)
+    from .compatibility import BUILDING_BLOCKS, MOD_STATES, MODS
+    from .palettes import BLOCKS
+
+    try:
+        enabled = selected_mods([m for m in mods.split(",") if m])
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    entries = []
+    owners = {b["name"]: slug for slug, mod in MODS.items() for b in mod["blocks"]}
+    for name, block in sorted(BUILDING_BLOCKS.items()):
+        owner = block.get("mod", owners.get(name, "vanilla"))
+        if owner not in ("vanilla", *enabled):
+            continue
+        rules = MOD_STATES.get(name)
+        if rules is None:
+            rules = {}
+            for rule in BLOCKS.get(name, {}).get("states", []):
+                values = rule.get("values")
+                if rule["type"] == "bool":
+                    values = ["false", "true"]
+                if values:
+                    rules[rule["name"]] = [str(v) for v in values]
+        entries.append({**block, "mod": owner, "states": rules})
+    return {"blocks": entries}
+
+
+@app.post("/api/preset/save")
+def save_preset(request: Request, document: dict):
+    session = session_for(request)
+    with session.lock:
+        if session.source is None:
+            raise HTTPException(409, "Open a source file first")
+        try:
+            settings = checked_settings(document.get("settings", {}), session.source, session.edits)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        types = {}
+        for key, record in session.edits.records.items():
+            types.setdefault(record.type_key, []).append(session.edits.mappings.get(key))
+        mappings = [
+            {"type_key": key, "mapping": values[0]}
+            for key, values in sorted(types.items())
+            if values[0] is not None and all(v == values[0] for v in values)
+        ]
+        return {"schema": 1, "kind": "fromthecraft-preset", "settings": settings, "type_mappings": mappings}
+
+
+@app.post("/api/preset/open")
+def open_preset(request: Request, document: dict):
+    session = session_for(request)
+    with session.lock:
+        if session.source is None:
+            raise HTTPException(409, "Open a source file first")
+        try:
+            if (
+                document.get("schema") != 1
+                or document.get("kind") != "fromthecraft-preset"
+                or set(document) - {"schema", "kind", "settings", "type_mappings"}
+            ):
+                raise ValueError("Unsupported preset schema")
+            mappings = document.get("type_mappings", [])
+            if not isinstance(mappings, list) or len(mappings) > 1000:
+                raise ValueError("Invalid preset mappings")
+            clone = export_project(session.source, session.edits, session.filename, {}, {})
+            layer, _, _ = import_project(clone, session.source)
+            types = {record.type_key for record in layer.records.values()}
+            skipped = 0
+            for item in mappings:
+                if (
+                    not isinstance(item, dict)
+                    or set(item) != {"type_key", "mapping"}
+                    or not isinstance(item["type_key"], str)
+                ):
+                    raise ValueError("Invalid preset type mapping")
+                if item["type_key"] not in types:
+                    skipped += 1
+                    continue
+                layer.apply({"kind": "mapping", "type_keys": [item["type_key"]], "mapping": item["mapping"]})
+            settings = checked_settings(document.get("settings", {}), session.source, layer)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        session.edits = layer
+        session.invalidate()
+        return {"edits": layer.snapshot(), "settings": settings, "skipped_types": skipped}
+
+
+@app.post("/api/palette/preview")
+def palette_preview(request: Request, mapping: dict):
+    from .model import Part, SourceRecord, State
+    from .palettes import mc_material
+    import numpy as np
+
+    session = session_for(request)
+    record = SourceRecord("thumbnail", "thumbnail", "block", (), ())
+    material, color = mc_material(mapping.get("name", ""))
+    scene = Scene(
+        [Part("thumbnail", "cube", (1, 1, 1), np.eye(4), material, color, source_record=record)], "nbt"
+    )
+    try:
+        layer = EditLayer(scene)
+        layer.apply({"kind": "mapping", "ids": ["thumbnail"], "mapping": mapping})
+        state = layer.derive(scene).parts[0].mapping_override
+        scene.parts[0].state = State(state.name, state.properties)
+        scene.parts[0].identity = state.name
+        return preview(scene, textures=session.textures)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @app.post("/api/convert")

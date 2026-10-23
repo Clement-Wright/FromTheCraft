@@ -1,6 +1,66 @@
 import { test, expect } from "@playwright/test";
 import path from "node:path";
 
+test("project roundtrip and target mapping preserve record selection", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: "Open file", exact: true }),
+  ).toBeEnabled();
+  await page
+    .getByLabel("Open structure file")
+    .setInputFiles("../tests/fixtures/asymmetric.blueprint");
+  await expect(page.getByRole("status")).toContainText("Source ready");
+  await page
+    .getByRole("button", { name: /Select all .*beam/i })
+    .first()
+    .click();
+  await page
+    .getByRole("button", { name: "Exclude selected", exact: true })
+    .click();
+  await expect(page.getByTestId("excluded-count")).toHaveText("1 excluded");
+  await page.getByText("Projects and presets", { exact: true }).click();
+  const pending = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Save project", exact: true }).click();
+  const download = await pending;
+  const project = await download.path();
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await page.getByRole("button", { name: "Open project", exact: true }).click();
+  await page
+    .getByLabel("Open conversion project or preset")
+    .setInputFiles(project!);
+  await expect(page.getByTestId("excluded-count")).toHaveText("1 excluded");
+  await page
+    .getByRole("button", { name: /Select all .*beam/i })
+    .first()
+    .click();
+  await page
+    .getByRole("button", { name: "Restore selected", exact: true })
+    .click();
+  await page
+    .getByText("Local block browser / Replace mapping", { exact: true })
+    .click();
+  await page.getByLabel("Search target blocks").fill("minecraft:gold_block");
+  await page
+    .getByLabel("Target block", { exact: true })
+    .selectOption("minecraft:gold_block");
+  await expect(
+    page.getByText("Texture unavailable.", { exact: false }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Assign mapping to selected" })
+    .click();
+  await page.getByRole("button", { name: "Convert", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("ready to export");
+  const status = await page.request.get("/api/status").then((r) => r.json());
+  expect(
+    status.converted.materials.some(
+      (m: { name: string }) => m.name === "minecraft:gold_block",
+    ),
+  ).toBeTruthy();
+});
+
 test("source type exclusion and undo invalidate export while hiding does not", async ({
   page,
 }) => {
