@@ -66,7 +66,7 @@ def preview(scene, offset=(0, 0, 0), textures=None):
             slots,
             record.type_key if record else None,
         )
-        placement = part.source_cell
+        placement = part.source_record.id if part.source_record else part.source_cell
         if placement is None or placement not in counted:
             inventory[material_key] = inventory.get(material_key, 0) + 1
             counted.add(placement)

@@ -23,6 +23,7 @@ from .model import Cancelled, Result, Scene
 from .preview import preview
 from .textures import TextureLibrary, MAX_ARCHIVE_BYTES
 from .compatibility import mod_choices, selected_mods
+from .edits import EditLayer
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
@@ -41,6 +42,8 @@ class Session:
     cancelled: threading.Event = field(default_factory=threading.Event)
     generation: int = 0
     source: Scene | None = None
+    source_bytes: bytes = b""
+    edits: EditLayer | None = None
     filename: str = "structure"
     state: str = "empty"
     progress: float = 0
@@ -190,6 +193,8 @@ async def open_source(request: Request, file: UploadFile = File(...)):
         session.invalidate("loading")
         generation = session.generation
         session.source = None
+        session.edits = None
+        session.source_bytes = b""
     content = await file.read(32 * 1024**2 + 1)
     await file.close()
     if len(content) > 32 * 1024**2:
@@ -209,9 +214,51 @@ async def open_source(request: Request, file: UploadFile = File(...)):
         if generation != session.generation:
             raise HTTPException(409, "A newer source replaced this file")
         session.source = scene
+        session.source_bytes = content
+        session.edits = EditLayer(scene)
         session.filename = Path(file.filename or "structure").stem
         session.state = "loaded"
-    return {"source": display, "notices": dict(scene.notices), "filename": session.filename}
+    return {
+        "source": display,
+        "notices": dict(scene.notices),
+        "filename": session.filename,
+        "edits": session.edits.snapshot(),
+    }
+
+
+@app.get("/api/edits")
+def edit_status(request: Request):
+    session = session_for(request)
+    with session.lock:
+        return {"edits": session.edits.snapshot() if session.edits else None}
+
+
+def change_edits(session, command=None, direction=None):
+    with session.lock:
+        if session.edits is None:
+            raise HTTPException(409, "Open a source file first")
+        try:
+            changed = getattr(session.edits, direction)() if direction else session.edits.apply(command)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if changed:
+            session.invalidate()
+        return {"edits": session.edits.snapshot(), "invalidated": changed}
+
+
+@app.post("/api/edits")
+def edit_source(request: Request, command: dict):
+    return change_edits(session_for(request), command)
+
+
+@app.post("/api/edits/undo")
+def undo_source(request: Request):
+    return change_edits(session_for(request), direction="undo")
+
+
+@app.post("/api/edits/redo")
+def redo_source(request: Request):
+    return change_edits(session_for(request), direction="redo")
 
 
 class Options(BaseModel):
@@ -237,7 +284,8 @@ def start_conversion(request: Request, options: Options):
         if session.source is None:
             raise HTTPException(409, "Open a source file first")
         session.invalidate("working")
-        generation, scene, cancelled = session.generation, session.source, session.cancelled
+        generation, cancelled = session.generation, session.cancelled
+        scene = session.edits.derive(session.source) if session.edits else session.source
 
     def progress(value):
         with session.lock:

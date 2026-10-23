@@ -153,8 +153,10 @@ def mod_target(base, material, color, transparent, preference, mods):
 
 
 def mc_target(part, preference, mods=()):
-    base = mc_target_material(part, preference)
-    if mods:
+    base = part.mapping_override or mc_target_material(part, preference)
+    if part.mapping_full:
+        return base
+    if mods and part.mapping_override is None:
         base = mod_target(base, part.material, tuple(part.color), part.transparent, preference, mods)
     if part.shape == "detailed" and part.state is not None:
         return replace(part.state, copied_material=base)

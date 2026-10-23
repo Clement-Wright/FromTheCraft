@@ -33,6 +33,14 @@ def convert(
         raise ValueError("Choose a format in the other game")
     if detailed_copycats and ("copycats" not in mods or output == "blueprint"):
         raise ValueError("Detailed Copycats requires Copycats+ and Minecraft output")
+    allowed = {block["name"] for slug in mods for block in MODS[slug]["blocks"]}
+    for part in scene.parts:
+        mapping = part.mapping_override
+        if mapping:
+            if output == "blueprint":
+                raise ValueError("Minecraft material overrides require Minecraft output")
+            if not mapping.name.startswith("minecraft:") and mapping.name not in allowed:
+                raise ValueError(f"Enable the mod required by mapping {mapping.name}")
     cells, offset = voxelize(scene, scale, progress, cancelled, detailed=detailed_copycats)
     if not cells:
         raise ValueError("No structural blocks remain after skipped blocks")

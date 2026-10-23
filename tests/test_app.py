@@ -36,6 +36,48 @@ def finished(client):
     pytest.fail("Conversion did not finish")
 
 
+def test_edit_exclusion_invalidates_export_but_visibility_preserves_it(client):
+    source = upload(client).json()["source"]
+    record = source["records"][1]["id"]
+    client.post("/api/convert", json={"format": "nbt"})
+    before = finished(client)
+    hidden = client.post("/api/edits", json={"kind": "hide", "ids": [record]})
+    assert hidden.status_code == 200
+    assert client.get("/api/export", params={"result_id": before["result_id"]}).status_code == 200
+    excluded = client.post("/api/edits", json={"kind": "exclude", "ids": [record]})
+    assert excluded.status_code == 200
+    assert client.get("/api/export", params={"result_id": before["result_id"]}).status_code == 409
+    assert record in excluded.json()["edits"]["excluded"]
+    assert client.post("/api/edits/undo").json()["edits"]["excluded"] == []
+
+
+def test_finishing_worker_cannot_publish_after_source_edit(client, monkeypatch):
+    import threading
+    import fromthecraft.app as module
+
+    entered, release, done = threading.Event(), threading.Event(), threading.Event()
+    original = module.convert
+
+    def delayed(*args, **kwargs):
+        result = original(*args, **kwargs)
+        entered.set()
+        assert release.wait(5)
+        done.set()
+        return result
+
+    monkeypatch.setattr(module, "convert", delayed)
+    record = upload(client).json()["source"]["records"][0]["id"]
+    client.post("/api/convert", json={"format": "nbt"})
+    try:
+        assert entered.wait(5)
+        client.post("/api/edits", json={"kind": "exclude", "ids": [record]})
+    finally:
+        release.set()
+    assert done.wait(5)
+    assert client.get("/api/status").json()["state"] == "stale"
+    assert client.get("/api/export").status_code == 409
+
+
 def test_preview_is_exact_exported_serialization(client):
     from fromthecraft.convert import read_file
     from fromthecraft.preview import preview
