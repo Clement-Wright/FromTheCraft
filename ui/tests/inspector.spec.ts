@@ -137,6 +137,28 @@ test("Minecraft sources offer hollowing for FtD output", async ({ page }) => {
   });
 });
 
+test("clipped triangles cannot be inspected and clipping preserves the export", async ({
+  page,
+}) => {
+  await page.getByRole("button", { name: "Convert", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText(/ready to export/);
+  const canvas = page.getByLabel("Source 3D structural preview");
+  await canvas.focus();
+  await page.keyboard.press("i");
+  await expect(page.getByTestId("source-block-inspector")).toBeVisible();
+  await page.getByText("Clipping and layers", { exact: false }).click();
+  await page.getByLabel("Clip axis", { exact: true }).selectOption("y");
+  await page.getByLabel("Clip from", { exact: true }).fill("2");
+  await canvas.focus();
+  await page.keyboard.press("i");
+  await expect(page.getByTestId("source-block-inspector")).not.toBeVisible();
+  await expect(page.getByRole("button", { name: "Export file" })).toBeEnabled();
+  await page.getByRole("button", { name: "Reset view filters" }).click();
+  await canvas.focus();
+  await page.keyboard.press("i");
+  await expect(page.getByTestId("source-block-inspector")).toBeVisible();
+});
+
 test("materials can collapse by keyboard to give the previews more height", async ({
   page,
 }) => {

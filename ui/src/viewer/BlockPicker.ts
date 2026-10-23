@@ -18,6 +18,7 @@ type Bucket = { bounds: T.Box3; entries: Entry[] };
 // Spatial buckets prune instances before exact triangle tests. Center-based buckets
 // use the union of actual bounds, so long and rotated parts stay pickable.
 export class BlockPicker {
+  clippingPlanes: T.Plane[] = [];
   private buckets = new Map<string, Bucket>();
   private matrix = new T.Matrix4();
   private point = new T.Vector3();
@@ -84,10 +85,15 @@ export class BlockPicker {
         entry.proxy.matrixWorld.copy(this.matrix);
         hits.length = 0;
         entry.proxy.raycast(this.raycaster, hits);
-        if (hits.length)
+        const visible = hits.filter((hit) =>
+          this.clippingPlanes.every(
+            (plane) => plane.distanceToPoint(hit.point) >= -1e-6,
+          ),
+        );
+        if (visible.length)
           selected.push({
             entry,
-            distance: Math.min(...hits.map((hit) => hit.distance)),
+            distance: Math.min(...visible.map((hit) => hit.distance)),
           });
       }
     }

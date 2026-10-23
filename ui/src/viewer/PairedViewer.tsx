@@ -6,6 +6,7 @@ import { ConvexGeometry } from "three/addons/geometries/ConvexGeometry.js";
 import type { Display } from "../types";
 import { BlockPicker, type HoveredBlock } from "./BlockPicker";
 import { surfaceGeometry, textureBatches } from "./TextureSurfaces";
+import { emptyFilter, filterPlanes, type ViewFilter } from "./ViewFilter";
 
 function boxes(pieces: [number[], number[]][]) {
   const positions: number[] = [];
@@ -135,6 +136,7 @@ type View = {
   render: () => void;
   renderer: T.WebGLRenderer;
   highlight?: () => void;
+  filter?: () => void;
 };
 type Props = {
   source?: Display;
@@ -147,6 +149,7 @@ type Props = {
   onSelect?: (ids: string[], additive: boolean) => void;
   selectedIds?: string[];
   excludedIds?: string[];
+  filter?: ViewFilter;
 };
 
 export default function PairedViewer({
@@ -160,9 +163,19 @@ export default function PairedViewer({
   onSelect,
   selectedIds = [],
   excludedIds = [],
+  filter = emptyFilter,
 }: Props) {
   const hosts = [useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null)];
   const views = useRef<View[]>([]);
+  const filterRef = useRef(filter);
+  filterRef.current = filter;
+  const poses = useRef<
+    { key: string; position: T.Vector3; target: T.Vector3 }[]
+  >([]);
+  const poseKey = `${source?.source_hash ?? source?.count ?? "empty"}:${view}:${reset}`;
+  useEffect(() => {
+    views.current.forEach((view) => view.filter?.());
+  }, [filter]);
   const linkedRef = useRef(linked);
   const [error, setError] = useState("");
   const [hovered, setHovered] = useState<(HoveredBlock | undefined)[]>([]);
@@ -489,9 +502,20 @@ export default function PairedViewer({
           );
         camera.up.set(0, 1, 0);
         controls.target.copy(center);
+        const pose = poses.current[index];
+        if (pose?.key === poseKey) {
+          camera.position.copy(pose.position);
+          controls.target.copy(pose.target);
+        }
         controls.update();
         const render = () => renderer.render(scene, camera);
         const current: View = { camera, controls, render, renderer };
+        current.filter = () => {
+          renderer.clippingPlanes = filterPlanes(filterRef.current, index);
+          picker.clippingPlanes = renderer.clippingPlanes;
+          clearHover();
+          render();
+        };
         current.highlight = () => {
           for (const { mesh, ids, colors } of sourceMeshes) {
             ids.forEach((id, i) =>
@@ -609,6 +633,7 @@ export default function PairedViewer({
         renderer.domElement.addEventListener("pointerdown", clearHover);
         renderer.domElement.addEventListener("keydown", inspectKey);
         renderer.domElement.addEventListener("blur", clearHover);
+        current.filter();
         const change = () => {
           clearHover();
           if (syncing) return;
@@ -649,6 +674,11 @@ export default function PairedViewer({
         resize.observe(element);
         loadImages();
         cleanup.push(() => {
+          poses.current[index] = {
+            key: poseKey,
+            position: camera.position.clone(),
+            target: controls.target.clone(),
+          };
           disposed = true;
           window.cancelAnimationFrame(pendingPick);
           renderer.domElement.removeEventListener("pointermove", move);

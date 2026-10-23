@@ -3,6 +3,8 @@ import PairedViewer from "./viewer/PairedViewer";
 import Materials from "./Materials";
 import ModPicker from "./ModPicker";
 import SourceEditor, { type EditCommand } from "./SourceEditor";
+import ViewFilters from "./ViewFilters";
+import { emptyFilter, type ViewFilter } from "./viewer/ViewFilter";
 import type { EditSnapshot } from "./types";
 import type { Display, ModChoice, Status, TextureStatus } from "./types";
 
@@ -25,6 +27,7 @@ export default function App() {
   const [candidates, setCandidates] = useState<string[]>([]);
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState("");
+  const [filter, setFilter] = useState<ViewFilter>(emptyFilter);
   const [status, setStatus] = useState<Status>({
     state: "empty",
     progress: 0,
@@ -130,6 +133,7 @@ export default function App() {
     setEdits(undefined);
     setEditError("");
     sourceRef.current = undefined;
+    setFilter(emptyFilter);
     setSourceNotices({});
     setFilename(file.name);
     setStatus({ state: "loading", progress: 0, error: "" });
@@ -696,6 +700,7 @@ export default function App() {
             }}
             selectedIds={selected}
             excludedIds={edits?.excluded}
+            filter={filter}
           />
           <div className="preview-context">
             <span>
@@ -743,6 +748,7 @@ export default function App() {
               below.
             </p>
           )}
+          <ViewFilters source={source} value={filter} onChange={setFilter} />
           <Materials
             source={source}
             converted={status.converted}
