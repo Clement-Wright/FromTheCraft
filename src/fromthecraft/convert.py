@@ -21,7 +21,15 @@ def convert(
     shell_thickness=1,
     mods=(),
     detailed_copycats=False,
+    decoration_mode="structure",
+    surface_thickness=0.125,
 ):
+    if decoration_mode not in {"structure", "decorations", "appearance"}:
+        raise ValueError("Unknown decoration mode")
+    if surface_thickness not in (0.0625, 0.125, 0.25, 0.5):
+        raise ValueError("Invalid decorative surface thickness")
+    from .mesh_geometry import prepare_meshes
+
     mods = selected_mods(mods)
     if scale not in (0.25, 0.5, 1, 2, 4):
         raise ValueError("Scale must be 0.25, 0.5, 1, 2, or 4")
@@ -33,6 +41,7 @@ def convert(
         raise ValueError("Choose a format in the other game")
     if detailed_copycats and ("copycats" not in mods or output == "blueprint"):
         raise ValueError("Detailed Copycats requires Copycats+ and Minecraft output")
+    scene = prepare_meshes(scene, decoration_mode, surface_thickness, scale)
     allowed = {block["name"] for slug in mods for block in MODS[slug]["blocks"]}
     for part in scene.parts:
         mapping = part.mapping_override

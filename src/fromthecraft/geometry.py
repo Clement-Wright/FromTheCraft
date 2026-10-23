@@ -159,6 +159,12 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=Fals
         grid_box = np.allclose(world, np.round(world), rtol=0, atol=1e-7)
         solid_box = part.shape == "box" and aligned and grid_box
         inv = None if solid_box else np.linalg.inv(part.transform)
+        mesh_sampler = None
+        if part.mesh:
+            from .mesh_geometry import MeshSampler
+
+            verts, indices, closed, thickness, span = part.mesh
+            mesh_sampler = MeshSampler(verts * span, indices, thickness, cancelled, closed)
         # Keep the denser detail grid within the former sampling memory budget.
         batch_size = max(1, 1_572_864 // sample_count)
         for start in range(0, len(candidates), batch_size):
@@ -169,7 +175,9 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=Fals
             if not solid_box:
                 points = (batch[:, None, :] + samples).reshape(-1, 3) / scale
                 local = (points @ inv[:3, :3].T + inv[:3, 3]) / part.size
-                masks = contains(part.shape, local).reshape(-1, sample_count)
+                masks = (
+                    mesh_sampler.contains(local * span) if mesh_sampler else contains(part.shape, local)
+                ).reshape(-1, sample_count)
             for row, position in enumerate(batch):
                 mask = masks[row] if masks is not None else None
                 if mask is None or mask.any():
@@ -193,12 +201,20 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=Fals
                 for n in part.size
             ]
             seed_masks = {}
-            source_seeds = product(*axes)
+            source_seeds = (
+                iter(
+                    np.clip(
+                        np.concatenate((part.mesh[0], part.mesh[0][part.mesh[1]].mean(1))), 1e-5, 1 - 1e-5
+                    )
+                )
+                if part.mesh
+                else product(*axes)
+            )
             while batch := list(islice(source_seeds, 4096)):
                 if cancelled and cancelled():
                     raise Cancelled("Conversion cancelled")
                 seeds = np.asarray(batch)
-                seeds = seeds[contains(part.shape, seeds)] * part.size
+                seeds = seeds * part.size if mesh_sampler else seeds[contains(part.shape, seeds)] * part.size
                 world_seeds = (seeds @ part.transform[:3, :3].T + part.transform[:3, 3]) * scale
                 positions = np.floor(world_seeds + 1e-7).astype(int)
                 octants = ((world_seeds - positions >= 0.5).astype(int) @ [4, 2, 1]).tolist()

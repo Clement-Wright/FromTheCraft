@@ -1,6 +1,7 @@
 import json
 import hashlib
 import re
+from dataclasses import replace
 from collections import Counter
 from pathlib import Path
 
@@ -10,6 +11,8 @@ from .catalog import game_assets, installed_catalog
 from .geometry import quaternion, rotation
 from .ftd_shapes import native_shape
 from .model import MAX_PARTS, Part, Scene, SourceRecord
+from .decorations import read_decorations, packet_headers, fields, decode_decoration, unity_euler
+from .ftd_meshes import resolve_static_mesh
 
 DATA = Path(__file__).with_name("data")
 CATALOG = json.loads((DATA / "ftd_blocks.json").read_text())
@@ -76,11 +79,13 @@ def read_blueprint(content: bytes) -> Scene:
         raise ValueError("Blueprint and ItemDictionary must be JSON objects")
     parts, notices = [], Counter()
     records = 0
+    source_records, mesh_cache = [], {}
+    mesh_triangles = 0
     source_hash = hashlib.sha256(content).hexdigest()
     colors = [vector(c, 4) for c in root.get("COL", [])]
 
     def visit(construct, parent, depth, path=("Blueprint",)):
-        nonlocal records
+        nonlocal records, mesh_triangles
         if depth > 32:
             raise ValueError("Blueprint construct nesting exceeds 32")
         transform = parent.copy()
@@ -95,22 +100,41 @@ def read_blueprint(content: bytes) -> Scene:
             raise ValueError("Blueprint block-array length mismatch")
         if records > MAX_PARTS:
             raise ValueError(f"Blueprint exceeds {MAX_PARTS:,} blocks")
+        hosts, mimics = {}, {}
         for index, (position, rot, block_id, paint) in enumerate(
             zip(construct["BLP"], construct["BLR"], construct["BlockIds"], construct["BCI"])
         ):
             guid = items.get(str(block_id), str(block_id))
             entry = CATALOG.get(guid)
+            record_path = path + ("blocks", str(index))
+            record = SourceRecord(
+                f"{source_hash}:{'/'.join(record_path)}",
+                guid,
+                "block",
+                record_path,
+                path,
+                name=entry["Name"] if entry else guid,
+            )
+            source_records.append(record)
+            anchor = tuple(vector(position))
+            hosts.setdefault(anchor, record.id)
             if entry is None:
                 notices[f"Unrecognized FtD ID {guid}: omitted"] += 1
                 continue
             policy, shape = ftd_policy(entry)
             if policy == "skipped":
-                notices["Intentionally skipped mimics (ordinary host blocks retained)"] += 1
+                mimics[index] = (record, vector(position), rotation(rot), paint)
                 continue
             extent = entry.get("Footprint")
             if extent is None:
                 extent = FOOTPRINTS[str(entry["SizeId"])]
             size = tuple(extent[a + "n"] + extent[a + "p"] + 1 for a in "xyz")
+            if np.prod(size) <= 512:
+                from itertools import product
+
+                for delta in product(*[range(-extent[a + "n"], extent[a + "p"] + 1) for a in "xyz"]):
+                    cell = tuple(np.rint(np.asarray(anchor) + rotation(rot) @ delta).astype(int))
+                    hosts.setdefault(cell, record.id)
             material = entry["Material"]
             color = np.array(entry.get("DefaultColor", COLORS.get(material, (0.45, 0.45, 0.45))))
             if not isinstance(paint, int) or not 0 <= paint < max(1, len(colors)):
@@ -127,8 +151,6 @@ def read_blueprint(content: bytes) -> Scene:
             )
             world = transform @ local
             world[:3, 3] += 0.5
-            record_path = path + ("blocks", str(index))
-            record = SourceRecord(f"{source_hash}:{'/'.join(record_path)}", guid, "block", record_path, path)
             parts.append(
                 Part(
                     entry["Name"],
@@ -145,14 +167,109 @@ def read_blueprint(content: bytes) -> Scene:
                 notices[
                     f"Approximated FtD {shape if shape != 'box' else 'known footprint'}: {entry['Name']}"
                 ] += 1
+
+        def add_decoration(data, record, base, paint):
+            nonlocal mesh_triangles
+            guid = data["mesh_guid"]
+            if guid not in mesh_cache:
+                vertices, indices, reason = resolve_static_mesh(guid)
+                if vertices is not None:
+                    low, high = vertices.min(0), vertices.max(0)
+                    span = np.maximum(high - low, 1e-6)
+                    mesh_cache[guid] = ((vertices - low) / span, indices, low, span, reason)
+                else:
+                    mesh_cache[guid] = (None, None, None, None, reason)
+            vertices, indices, low, span, reason = mesh_cache[guid]
+            if vertices is None and "intentionally empty" in reason:
+                source_records.append(
+                    replace(record, hide_host=data["hide_original"], geometry_status="empty")
+                )
+                return
+            if vertices is None or mesh_triangles + len(indices) > 2_000_000:
+                source_records.append(replace(record, geometry_status="unresolved"))
+                notices[
+                    f"Unresolved decoration {guid}: {reason if vertices is None else 'scene triangle budget reached'}"
+                ] += 1
+                return
+            record = replace(record, hide_host=data["hide_original"])
+            source_records.append(record)
+            material = CATALOG.get(guid, {}).get("Material", "Metal")
+            color = np.array(COLORS.get(material, COLORS["Metal"]))
+            if colors and 0 <= paint < len(colors):
+                rgba = colors[paint]
+                color = color * (1 - rgba[3]) + rgba[:3] * rgba[3]
+            if data["material_guid"] != "00000000-0000-0000-0000-000000000000":
+                notices["Decoration material replacement uses a structural color approximation"] += 1
+            local = np.eye(4)
+            local[:3, :3] = unity_euler(data["orientation"]) @ np.diag(data["scale"])
+            local[:3, 3] = data["position"]
+            normalize = np.eye(4)
+            normalize[:3, :3] = np.diag(span)
+            normalize[:3, 3] = low
+            world = base @ local @ normalize
+            parts.append(
+                Part(
+                    "Decoration: " + reason,
+                    "mesh",
+                    (1, 1, 1),
+                    world,
+                    material,
+                    tuple(color),
+                    material == "Glass",
+                    source_record=record,
+                    mesh=(vertices, indices),
+                    decoration=True,
+                    replaces_host=data["hide_original"],
+                )
+            )
+            mesh_triangles += len(indices)
+
+        try:
+            decorations = read_decorations(construct.get("VehicleData"))
+        except ValueError as exc:
+            decorations = []
+            notices[f"Unresolved decoration payload: {exc}"] += 1
+        for data in decorations:
+            record_path = path + ("decorations", str(data["id"]))
+            record = SourceRecord(
+                f"{source_hash}:{'/'.join(record_path)}",
+                data["mesh_guid"],
+                "decoration",
+                record_path,
+                path,
+                hosts.get(tuple(data["tether"])),
+                "Decoration " + data["mesh_guid"],
+            )
+            if len(source_records) > MAX_PARTS:
+                raise ValueError("Blueprint source record budget exceeded")
+            base = transform.copy()
+            base[:3, 3] += transform[:3, :3] @ np.asarray(data["tether"])
+            base[:3, 3] += 0.5
+            add_decoration(data, record, base, data["paint"])
+        if mimics:
+            resolved_mimics = set()
+            try:
+                for index, headers, _ in packet_headers(construct.get("BlockData", ""), id_bytes=3):
+                    if index not in mimics or 1 not in headers:
+                        continue
+                    record, position, orientation, paint = mimics[index]
+                    data = decode_decoration(fields(headers[1]), index, mimic=True)
+                    base = transform.copy()
+                    base[:3, :3] = transform[:3, :3] @ orientation
+                    base[:3, 3] += transform[:3, :3] @ position + 0.5
+                    add_decoration(data, record, base, paint)
+                    resolved_mimics.add(index)
+            except ValueError as exc:
+                notices[f"Unresolved mimic payload: {exc}"] += 1
+            notices["Legacy or unresolved mimic records retained without visible geometry"] += len(
+                mimics
+            ) - len(resolved_mimics)
         if construct.get("Decorations") or construct.get("DEC"):
-            notices["Intentionally skipped decoration overlays"] += len(
+            notices["Unsupported legacy decoration overlay representation"] += len(
                 construct.get("Decorations", construct.get("DEC", []))
             )
         if construct.get("BlockData") or construct.get("VehicleData") or construct.get("BlockStringData"):
-            notices[
-                "Intentionally skipped block/vehicle payloads, including mechanisms and possible decoration overlays"
-            ] += 1
+            notices["Mechanism payloads and unsupported renderer data are not converted"] += 1
         for index, child in enumerate(construct.get("SCs", [])):
             visit(child, transform, depth + 1, path + ("SCs", str(index)))
 
@@ -160,7 +277,14 @@ def read_blueprint(content: bytes) -> Scene:
         visit(root, np.eye(4), 0)
     except (KeyError, TypeError, IndexError, OverflowError) as exc:
         raise ValueError(f"Malformed blueprint block data: {exc}") from exc
-    return Scene(parts, "blueprint", notices, str(root.get("GameVersion", "unknown")), source_hash)
+    return Scene(
+        parts,
+        "blueprint",
+        notices,
+        str(root.get("GameVersion", "unknown")),
+        source_hash,
+        tuple(source_records),
+    )
 
 
 def write_blueprint(cells, name="FromTheCraft"):

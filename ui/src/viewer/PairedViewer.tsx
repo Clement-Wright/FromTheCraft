@@ -324,21 +324,27 @@ export default function PairedViewer({
           colors: T.Color[];
         }[] = [];
         for (const group of models[index]?.groups ?? []) {
-          const geometry = group.vertices
-            ? new ConvexGeometry(
-                Array.from(
-                  { length: group.vertices.length / 3 },
-                  (_, i) =>
-                    new T.Vector3(
-                      ...(group.vertices!.slice(i * 3, i * 3 + 3) as [
-                        number,
-                        number,
-                        number,
-                      ]),
-                    ),
-                ),
+          const geometry = group.triangles
+            ? new T.BufferGeometry().setAttribute(
+                "position",
+                new T.Float32BufferAttribute(group.vertices!, 3),
               )
-            : shapeGeometry(group.shape);
+            : group.vertices
+              ? new ConvexGeometry(
+                  Array.from(
+                    { length: group.vertices.length / 3 },
+                    (_, i) =>
+                      new T.Vector3(
+                        ...(group.vertices!.slice(i * 3, i * 3 + 3) as [
+                          number,
+                          number,
+                          number,
+                        ]),
+                      ),
+                  ),
+                )
+              : shapeGeometry(group.shape);
+          if (group.triangles) geometry.computeVertexNormals();
           const settings = {
             roughness: 0.84,
             metalness: 0.02,

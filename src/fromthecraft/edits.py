@@ -11,7 +11,10 @@ from .palettes import BLOCKS
 
 class EditLayer:
     def __init__(self, scene):
-        self.records = {p.source_record.id: p.source_record for p in scene.parts if p.source_record}
+        self.records = {record.id: record for record in scene.source_records}
+        for part in scene.parts:
+            if part.source_record:
+                self.records.setdefault(part.source_record.id, part.source_record)
         self.commands = []
         self.cursor = 0
         self.revision = 0
@@ -147,4 +150,8 @@ class EditLayer:
                     mapping_full=mapping["full_block"],
                 )
             parts.append(part)
-        return replace(scene, parts=parts)
+        return replace(
+            scene,
+            parts=parts,
+            source_records=tuple(r for r in scene.source_records if r.id not in self.excluded),
+        )

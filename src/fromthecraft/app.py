@@ -268,6 +268,8 @@ class Options(BaseModel):
     scale: Literal[0.25, 0.5, 1, 2, 4] = 1
     preference: Literal["balanced", "material", "color"] = "balanced"
     detailed_copycats: bool = False
+    decoration_mode: Literal["structure", "decorations", "appearance"] = "structure"
+    surface_thickness: Literal[0.0625, 0.125, 0.25, 0.5] = 0.125
     hollow: bool = False
     shell_thickness: Literal[1, 2, 3, 4] = 1
     mods: list[str] = Field(default_factory=list, max_length=8)
@@ -466,6 +468,8 @@ def start_conversion(request: Request, options: Options):
                 options.shell_thickness,
                 options.mods,
                 options.detailed_copycats,
+                options.decoration_mode,
+                options.surface_thickness,
             )
             display = preview(result.scene, result.offset, session.textures)
             with session.lock:

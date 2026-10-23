@@ -26,6 +26,9 @@ class SourceRecord:
     path: tuple[str, ...]
     parent_path: tuple[str, ...]
     host_id: str | None = None
+    name: str = ""
+    hide_host: bool = False
+    geometry_status: str = "resolved"
 
 
 @dataclass
@@ -43,6 +46,9 @@ class Part:
     source_record: SourceRecord | None = None
     mapping_override: State | None = None
     mapping_full: bool = False
+    mesh: tuple | None = None
+    decoration: bool = False
+    replaces_host: bool = False
 
 
 @dataclass
@@ -52,6 +58,7 @@ class Scene:
     notices: Counter = field(default_factory=Counter)
     version: str = ""
     source_hash: str = ""
+    source_records: tuple[SourceRecord, ...] = ()
 
 
 @dataclass

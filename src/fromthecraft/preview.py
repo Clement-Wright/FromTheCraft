@@ -6,7 +6,20 @@ from .ftd_shapes import vertices
 
 def preview(scene, offset=(0, 0, 0), textures=None):
     groups, blocks, block_ids, inventory = {}, [], {}, {}
-    records = {}
+    records = {
+        r.id: {
+            "id": r.id,
+            "type_key": r.type_key,
+            "kind": r.kind,
+            "path": list(r.path),
+            "parent_path": list(r.parent_path),
+            "host_id": r.host_id,
+            "name": r.name or r.type_key,
+            "hide_host": r.hide_host,
+            "geometry_status": r.geometry_status,
+        }
+        for r in scene.source_records
+    }
     counted = set()
     for part in scene.parts:
         record = part.source_record
@@ -70,7 +83,7 @@ def preview(scene, offset=(0, 0, 0), textures=None):
         if placement is None or placement not in counted:
             inventory[material_key] = inventory.get(material_key, 0) + 1
             counted.add(placement)
-        key = (part.shape, part.transparent)
+        key = (part.shape, part.transparent, id(part.mesh[0]) if part.mesh else None)
         group = groups.setdefault(
             key,
             {
@@ -80,11 +93,15 @@ def preview(scene, offset=(0, 0, 0), textures=None):
                 "colors": [],
                 "block_indices": [],
                 "source_ids": [],
+                "decoration": part.decoration,
             },
         )
         group["block_indices"].append(block_ids[identity])
         group["source_ids"].append(record.id if record else None)
         hull_vertices = vertices(part.shape)
+        if part.mesh and "vertices" not in group:
+            group["vertices"] = np.asarray(part.mesh[0])[part.mesh[1]].reshape(-1).tolist()
+            group["triangles"] = True
         if hull_vertices and "vertices" not in group:
             group["vertices"] = list(hull_vertices)
         matrix = part.transform.copy()

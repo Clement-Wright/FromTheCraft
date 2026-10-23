@@ -1,4 +1,5 @@
 import type { EditSnapshot, SourceRecord } from "./types";
+import { useState } from "react";
 
 export type EditCommand = {
   kind: string;
@@ -36,6 +37,9 @@ export default function SourceEditor({
   const selectedSet = new Set(selected);
   const selectedRecords = records.filter((r) => selectedSet.has(r.id));
   const types = new Set(selectedRecords.map((r) => r.type_key));
+  const [attachments, setAttachments] = useState("");
+  const [query, setQuery] = useState("");
+  const children = records.some((r) => r.host_id && selectedSet.has(r.host_id));
   return (
     <section className="source-editor" aria-label="Conversion edits">
       <div className="editor-heading">
@@ -78,13 +82,25 @@ export default function SourceEditor({
         </button>
         <button
           disabled={busy || !selected.length}
-          onClick={() => onEdit({ kind: "exclude", ids: selected })}
+          onClick={() =>
+            onEdit({
+              kind: "exclude",
+              ids: selected,
+              ...(attachments ? { attachments } : {}),
+            })
+          }
         >
           Exclude selected
         </button>
         <button
           disabled={busy || !selected.length}
-          onClick={() => onEdit({ kind: "exclude", type_keys: [...types] })}
+          onClick={() =>
+            onEdit({
+              kind: "exclude",
+              type_keys: [...types],
+              ...(attachments ? { attachments } : {}),
+            })
+          }
         >
           Exclude all of this type
         </button>
@@ -110,6 +126,61 @@ export default function SourceEditor({
           Clear selection
         </button>
       </div>
+      {children && (
+        <label>
+          Attached decorations{" "}
+          <select
+            aria-label="Attachment exclusion policy"
+            value={attachments}
+            onChange={(e) => setAttachments(e.target.value)}
+          >
+            <option value="">Choose before excluding host</option>
+            <option value="host">Exclude host only</option>
+            <option value="all">Exclude host and its decorations</option>
+          </select>
+        </label>
+      )}
+      <details>
+        <summary>Source record browser ({records.length})</summary>
+        <label>
+          Find source records{" "}
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+        <div className="record-list">
+          {records
+            .filter((r) =>
+              `${r.name} ${r.type_key} ${r.path.join("/")}`
+                .toLowerCase()
+                .includes(query.toLowerCase()),
+            )
+            .slice(0, 100)
+            .map((r) => (
+              <button
+                key={r.id}
+                aria-pressed={selectedSet.has(r.id)}
+                onClick={(e) =>
+                  onSelect(
+                    e.ctrlKey || e.metaKey
+                      ? selectedSet.has(r.id)
+                        ? selected.filter((id) => id !== r.id)
+                        : [...selected, r.id]
+                      : [r.id],
+                  )
+                }
+              >
+                {r.name} · {r.kind} · {r.path.join("/")}
+              </button>
+            ))}
+        </div>
+        <p className="editor-hint">
+          Showing up to 100 matches. Hidden and unresolved records remain
+          selectable here.
+        </p>
+      </details>
       {selectedRecords.length > 0 && (
         <p>
           {selectedRecords

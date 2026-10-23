@@ -52,6 +52,8 @@ export type Display = {
     block_indices: number[];
     source_ids?: (string | null)[];
     vertices?: number[];
+    triangles?: boolean;
+    decoration?: boolean;
   }[];
   count: number;
   bounds: [number[], number[]];
@@ -61,6 +63,8 @@ export type Display = {
 };
 
 export type SourceRecord = {
+  hide_host?: boolean;
+  geometry_status?: string;
   id: string;
   type_key: string;
   kind: string;

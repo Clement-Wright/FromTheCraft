@@ -43,6 +43,9 @@ export default function App() {
   const [mods, setMods] = useState<string[]>([]);
   const [detailedCopycats, setDetailedCopycats] = useState(false);
   const [displayTextures, setDisplayTextures] = useState(false);
+  const [showDecorations, setShowDecorations] = useState(false);
+  const [decorationMode, setDecorationMode] = useState("structure");
+  const [surfaceThickness, setSurfaceThickness] = useState(0.125);
   const [textureStatus, setTextureStatus] = useState<TextureStatus>();
   const [textureLoading, setTextureLoading] = useState(false);
   const [textureError, setTextureError] = useState("");
@@ -218,6 +221,8 @@ export default function App() {
               detailedCopycats,
             hollow,
             shell_thickness: shellThickness,
+            decoration_mode: decorationMode,
+            surface_thickness: surfaceThickness,
           }),
           true,
         ),
@@ -295,6 +300,8 @@ export default function App() {
         format !== "blueprint" && mods.includes("copycats") && detailedCopycats,
       hollow,
       shell_thickness: shellThickness,
+      decoration_mode: decorationMode,
+      surface_thickness: surfaceThickness,
     };
   }
 
@@ -313,6 +320,8 @@ export default function App() {
     setDetailedCopycats(s.detailed_copycats);
     setHollow(s.hollow);
     setShellThickness(s.shell_thickness);
+    setDecorationMode(s.decoration_mode);
+    setSurfaceThickness(s.surface_thickness);
     setEdits(response.edits);
     setSelected([]);
     setCandidates([]);
@@ -362,26 +371,33 @@ export default function App() {
 
   const hiddenKey = (edits?.hidden ?? []).join("\n");
   const visibleSource = useMemo(() => {
-    if (!source || !hiddenKey) return source;
+    if (!source) return source;
     const hidden = new Set(hiddenKey.split("\n"));
+    if (showDecorations)
+      source.records?.forEach((r) => {
+        if (r.hide_host && r.host_id && r.geometry_status !== "unresolved")
+          hidden.add(r.host_id);
+      });
     return {
       ...source,
-      groups: source.groups.map((group) => {
-        const keep = group.block_indices
-          .map((_, i) => i)
-          .filter((i) => !hidden.has(group.source_ids?.[i] ?? ""));
-        return {
-          ...group,
-          matrices: keep.flatMap((i) =>
-            group.matrices.slice(i * 16, i * 16 + 16),
-          ),
-          colors: keep.flatMap((i) => group.colors.slice(i * 3, i * 3 + 3)),
-          block_indices: keep.map((i) => group.block_indices[i]),
-          source_ids: keep.map((i) => group.source_ids?.[i] ?? null),
-        };
-      }),
+      groups: source.groups
+        .filter((g) => showDecorations || !g.decoration)
+        .map((group) => {
+          const keep = group.block_indices
+            .map((_, i) => i)
+            .filter((i) => !hidden.has(group.source_ids?.[i] ?? ""));
+          return {
+            ...group,
+            matrices: keep.flatMap((i) =>
+              group.matrices.slice(i * 16, i * 16 + 16),
+            ),
+            colors: keep.flatMap((i) => group.colors.slice(i * 3, i * 3 + 3)),
+            block_indices: keep.map((i) => group.block_indices[i]),
+            source_ids: keep.map((i) => group.source_ids?.[i] ?? null),
+          };
+        }),
     };
-  }, [source, hiddenKey]);
+  }, [source, hiddenKey, showDecorations]);
 
   async function download() {
     const current = generation.current;
@@ -521,6 +537,55 @@ export default function App() {
               )}
             </select>
             <label htmlFor="scale">Output scale</label>
+            {source?.format === "blueprint" && (
+              <>
+                <label htmlFor="decorations">Decorative geometry</label>
+                <select
+                  id="decorations"
+                  value={decorationMode}
+                  onChange={(e) => {
+                    setDecorationMode(e.target.value);
+                    invalidate();
+                  }}
+                >
+                  <option value="structure">Structure only</option>
+                  <option value="decorations">Structure + decorations</option>
+                  <option value="appearance">Appearance-focused</option>
+                </select>
+                {decorationMode !== "structure" && (
+                  <>
+                    <p className="hint">
+                      Supported local static meshes become sampled blocks. Open
+                      surfaces use deliberate thickness. See notices for
+                      unresolved records.
+                    </p>
+                    <label htmlFor="surface-thickness">
+                      Open surface thickness
+                    </label>
+                    <select
+                      id="surface-thickness"
+                      value={surfaceThickness}
+                      onChange={(e) => {
+                        setSurfaceThickness(Number(e.target.value));
+                        invalidate();
+                      }}
+                    >
+                      {[0.0625, 0.125, 0.25, 0.5].map((n) => (
+                        <option key={n} value={n}>
+                          {n} blocks
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
+                {decorationMode === "appearance" && (
+                  <p className="warning">
+                    Appearance mode removes hosts explicitly hidden by supported
+                    decorations. This changes physical occupancy.
+                  </p>
+                )}
+              </>
+            )}
             <select
               id="scale"
               value={scale}
@@ -725,6 +790,16 @@ export default function App() {
               {textureLoading ? "Loading textures…" : "Load textures"}
             </button>
             <span className="scale-label">Output {scale}×</span>
+            {source?.format === "blueprint" && (
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={showDecorations}
+                  onChange={(e) => setShowDecorations(e.target.checked)}
+                />
+                Show decorations and mimics
+              </label>
+            )}
           </div>
           <PairedViewer
             source={visibleSource}
