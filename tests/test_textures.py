@@ -374,6 +374,8 @@ def test_incompatible_and_unsafe_inheritance_cannot_supply_client_assets(tmp_pat
         ("wrong", {"id": "wrong", "inheritsFrom": "1.20.1"}),
         ("unsafe", {"id": "unsafe", "inheritsFrom": "../../outside"}),
         ("cycle", {"id": "cycle", "inheritsFrom": "cycle"}),
+        ("malformed-downloads", {"downloads": []}),
+        ("malformed-client", {"downloads": {"client": False}}),
     ]:
         folder = tmp_path / "versions" / name
         folder.mkdir(parents=True)

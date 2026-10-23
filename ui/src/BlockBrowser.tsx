@@ -5,12 +5,14 @@ import type { EditCommand } from "./SourceEditor";
 
 type Block = {
   name: string;
+  label?: string;
   mod: string;
   material: string;
   properties: Record<string, string>;
   states: Record<string, string[]>;
 };
 export default function BlockBrowser({
+  target,
   mods,
   selected,
   token,
@@ -18,6 +20,7 @@ export default function BlockBrowser({
   onAssign,
   busy,
 }: {
+  target: string;
   mods: string[];
   selected: string[];
   token: string;
@@ -35,7 +38,7 @@ export default function BlockBrowser({
   const key = mods.join(",");
   useEffect(() => {
     let alive = true;
-    void fetch(`/api/palette?mods=${encodeURIComponent(key)}`)
+    void fetch(`/api/palette?mods=${encodeURIComponent(key)}&target=${target}`)
       .then(async (r) => {
         if (!r.ok) throw new Error("Could not load palette");
         return r.json();
@@ -47,11 +50,11 @@ export default function BlockBrowser({
     return () => {
       alive = false;
     };
-  }, [key]);
+  }, [key, target]);
   const filtered = useMemo(
     () =>
       blocks.filter((b) =>
-        `${b.name} ${b.material}`.includes(query.toLowerCase()),
+        `${b.name} ${b.material}`.toLowerCase().includes(query.toLowerCase()),
       ),
     [blocks, query],
   );
@@ -79,8 +82,8 @@ export default function BlockBrowser({
     <details className="source-editor block-browser">
       <summary>Local block browser / Replace mapping</summary>
       <p className="editor-hint">
-        Verified building palette for your selected mods. Mapping retains the
-        fitted source shape unless full-block replacement is selected.
+        Verified target building palette. Mapping retains the fitted source
+        shape unless full-block replacement is selected.
       </p>
       <label>
         Search target blocks{" "}
@@ -103,7 +106,7 @@ export default function BlockBrowser({
       >
         {filtered.map((b) => (
           <option key={b.name} value={b.name}>
-            {b.name} · {b.material}
+            {b.label ?? b.name} · {b.material}
           </option>
         ))}
       </select>
@@ -144,7 +147,10 @@ export default function BlockBrowser({
               uses a flat fallback.
             </p>
           ) : (
-            <p>Local Minecraft texture preview</p>
+            <p>
+              Local {target === "blueprint" ? "FtD" : "Minecraft"} texture
+              preview
+            </p>
           )}
         </div>
       )}

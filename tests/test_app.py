@@ -109,6 +109,32 @@ def test_projects_presets_and_enabled_palette_are_validated_atomically(client):
     assert client.post("/api/preset/open", json=preset).status_code == 200
 
 
+def test_reverse_native_mapping_uses_verified_ftd_material(client):
+    from fromthecraft.minecraft import write_structure
+    from fromthecraft.model import State
+    from fromthecraft.ftd import read_blueprint
+
+    source = client.post(
+        "/api/source",
+        files={"file": ("cube.nbt", write_structure({(0, 0, 0): State("minecraft:stone")}, (1, 1, 1)))},
+    ).json()["source"]
+    palette = client.get("/api/palette?target=blueprint").json()["blocks"]
+    target = next(b for b in palette if b["material"] == "Heavy Armour")
+    mapping = {"name": target["name"], "properties": {}}
+    assert client.post("/api/palette/preview", json=mapping).json()["format"] == "blueprint"
+    assert (
+        client.post(
+            "/api/edits", json={"kind": "mapping", "ids": [source["records"][0]["id"]], "mapping": mapping}
+        ).status_code
+        == 200
+    )
+    client.post("/api/convert", json={"format": "blueprint"})
+    result = finished(client)
+    assert result["state"] == "ready", result
+    content = client.get("/api/export", params={"result_id": result["result_id"]}).content
+    assert read_blueprint(content).parts[0].material == "Heavy Armour"
+
+
 def test_preview_is_exact_exported_serialization(client):
     from fromthecraft.convert import read_file
     from fromthecraft.preview import preview

@@ -21,9 +21,16 @@ def export_project(scene, edits, filename, settings, view):
 
 
 def import_project(document, scene):
-    if not isinstance(document, dict) or len(json.dumps(document).encode()) > MAX_PROJECT_BYTES:
+    if (
+        not isinstance(document, dict)
+        or len(json.dumps(document, allow_nan=False).encode()) > MAX_PROJECT_BYTES
+    ):
         raise ValueError("Project exceeds 32 MiB")
-    if document.get("schema") != 1 or document.get("kind") != "fromthecraft-project":
+    if (
+        type(document.get("schema")) is not int
+        or document.get("schema") != 1
+        or document.get("kind") != "fromthecraft-project"
+    ):
         raise ValueError("Unsupported project schema")
     if set(document) - {"schema", "kind", "source", "commands", "cursor", "settings", "view"}:
         raise ValueError("Unknown project fields")

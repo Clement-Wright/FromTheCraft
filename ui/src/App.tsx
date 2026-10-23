@@ -306,39 +306,46 @@ export default function App() {
   }
 
   async function restoreProject(kind: "project" | "preset", document: unknown) {
-    const current = generation.current;
-    const response = await mutate(() =>
-      request(`/api/${kind}/open`, JSON.stringify(document), true),
-    );
-    if (current !== generation.current) return;
-    ++generation.current;
-    const s = response.settings;
-    setFormat(s.format);
-    setScale(s.scale);
-    setPreference(s.preference);
-    setMods(s.mods);
-    setDetailedCopycats(s.detailed_copycats);
-    setHollow(s.hollow);
-    setShellThickness(s.shell_thickness);
-    setDecorationMode(s.decoration_mode);
-    setSurfaceThickness(s.surface_thickness);
-    setEdits(response.edits);
-    setSelected([]);
-    setCandidates([]);
-    setEditError("");
-    if (kind === "project") {
-      const v = response.view;
-      if (
-        v.filter &&
-        ["", "x", "y", "z"].includes(v.filter.axis) &&
-        Number.isFinite(v.filter.lower) &&
-        Number.isFinite(v.filter.upper)
-      )
-        setFilter(v.filter);
-      if (typeof v.textures === "boolean") setDisplayTextures(v.textures);
-      if (typeof v.linked === "boolean") setLinked(v.linked);
+    setEditBusy(true);
+    try {
+      const current = generation.current;
+      const response = await mutate(() =>
+        request(`/api/${kind}/open`, JSON.stringify(document), true),
+      );
+      if (current !== generation.current) return;
+      ++generation.current;
+      const s = response.settings;
+      setFormat(s.format);
+      setScale(s.scale);
+      setPreference(s.preference);
+      setMods(s.mods);
+      setDetailedCopycats(s.detailed_copycats);
+      setHollow(s.hollow);
+      setShellThickness(s.shell_thickness);
+      setDecorationMode(s.decoration_mode);
+      setSurfaceThickness(s.surface_thickness);
+      setEdits(response.edits);
+      setSelected([]);
+      setCandidates([]);
+      setEditError("");
+      if (kind === "project") {
+        const v = response.view;
+        if (
+          v.filter &&
+          ["", "x", "y", "z"].includes(v.filter.axis) &&
+          Number.isFinite(v.filter.lower) &&
+          Number.isFinite(v.filter.upper)
+        )
+          setFilter(v.filter);
+        if (typeof v.textures === "boolean") setDisplayTextures(v.textures);
+        if (typeof v.linked === "boolean") setLinked(v.linked);
+        if (typeof v.decorations === "boolean")
+          setShowDecorations(v.decorations);
+      }
+      setStatus({ state: "stale", progress: 0, error: "" });
+    } finally {
+      setEditBusy(false);
     }
-    setStatus({ state: "stale", progress: 0, error: "" });
   }
 
   useEffect(() => {
@@ -703,22 +710,22 @@ export default function App() {
                   Close app
                 </button>
               )}
-              <strong>Structure only</strong>
+              <strong>Structural conversion</strong>
               <p>{catalog}</p>
               <p>
                 Hulls, decks and building materials. Rotated constructs become
                 static geometry.
               </p>
               <p>
-                Mimics, mechanisms and gameplay data are skipped or
-                approximated.
+                Supported static decorations are optional. Mechanisms and
+                gameplay data are skipped.
               </p>
             </div>
           </div>
           <div className="settings-actions">
             <button
               className="primary convert"
-              disabled={!source || busy || tooLarge}
+              disabled={!source || busy || editBusy || tooLarge}
               onClick={() => void run()}
             >
               Convert
@@ -881,7 +888,12 @@ export default function App() {
                   `/api/${kind}/save`,
                   JSON.stringify({
                     settings: settings(),
-                    view: { filter, textures: displayTextures, linked },
+                    view: {
+                      filter,
+                      textures: displayTextures,
+                      linked,
+                      decorations: showDecorations,
+                    },
                   }),
                   true,
                 ),
@@ -915,8 +927,9 @@ export default function App() {
               error={editError}
             />
           )}
-          {source && format !== "blueprint" && (
+          {source && (
             <BlockBrowser
+              target={format}
               mods={mods}
               selected={selected}
               token={token.current}

@@ -46,6 +46,12 @@ def convert(
     for part in scene.parts:
         mapping = part.mapping_override
         if mapping:
+            if mapping.name.startswith("ftd:"):
+                from .ftd import CUBE_IDS
+
+                if output != "blueprint" or mapping.name[4:] not in CUBE_IDS.values():
+                    raise ValueError("FtD material overrides require a verified native target and FtD output")
+                continue
             if output == "blueprint":
                 raise ValueError("Minecraft material overrides require Minecraft output")
             if not mapping.name.startswith("minecraft:") and mapping.name not in allowed:

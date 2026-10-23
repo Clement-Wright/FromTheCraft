@@ -48,6 +48,20 @@ Enable **Display textures** to use locally available texture assets in both view
 
 The texture toggle changes only the display. It does not change the selected materials or exported file. Previews use simplified structural geometry and do not reproduce game lighting, connected textures or custom shaders. When FtD is installed, the viewer reads supported structural base-color textures from its loose files or embedded Unity Resources. Glass and any missing textures keep their simplified appearance. FromTheCraft includes no game or mod texture assets.
 
+### Conversion edits and inspection
+
+Click a source part to select it; Ctrl-click toggles selection. Source material rows select a whole canonical block type, and overlapping hits can be selected separately. **Exclude selected**, **Exclude all of this type**, **Restore selected** and **Replace mapping** operate on original source records, so a four-meter beam remains one editable part. Undo/Redo and Ctrl-Z/Ctrl-Y are available. Exclusions and mapping changes clear the old export and apply before sampling and hollowing. Original files are never rewritten.
+
+**Hide selected**, **Show hidden**, clipping planes and one-block layer views affect inspection only. They preserve the cached export. The source record browser also lists hidden and unresolved records. When a host has attached decorations, choose whether exclusion affects the host alone or its attachments too.
+
+**Save project** downloads a local JSON file with the source hash, edit history, conversion settings and view filters. Open the original source before **Open project**; a different hash is rejected. **Save preset** keeps settings and mappings applied to an entire source type, without source record IDs. The local block browser searches enabled vanilla/mod materials, shows a textured thumbnail when assets are available, exposes verified orientation states and assigns mappings. Minecraft sources also offer nine native FtD material families.
+
+### Decorations and mimics
+
+With FtD installed, supported current decoration packets and mimic payloads resolve through local core item, object and mesh definitions. Static OBJ caches and simple local OBJ meshes retain their saved position, rotation, scale, paint and host identity. **Show decorations and mimics** controls the source viewer separately from conversion.
+
+**Structure only** is the default. **Structure + decorations** adds supported visible geometry. **Appearance-focused** also removes hosts explicitly hidden by supported attachments, including intentionally empty meshes; this changes physical occupancy. Closed meshes are sampled as solids. Open surfaces use a selectable thickness of 1/16, 1/8, 1/4 or 1/2 output block. Thin details and unresolved geometry receive notices. Custom renderers, skinned meshes, unverified legacy payloads and missing local references remain unsupported. Decorative FtD output is not generated.
+
 ## How conversion works
 
 The source preview uses native structural primitives independently of the target grid. FtD beams occupy their full footprints, and nested child transforms compose continuously before the converter samples the geometry at the selected scale. Overlapping geometry contributes to the same cell's sampled shape; the first occupied contributor supplies its material.
@@ -58,13 +72,15 @@ Native FtD slopes, wedges and corners use distinct convex shape definitions. The
 
 ## Conversion limits
 
-Mimics and recognized decoration overlays are skipped. Special blocks receive approximations or omissions with notices. Fluids, entities, stored item inventories and gameplay payloads are ignored. Known copycat appearance data is read for structural conversion. Unknown modded blocks use placeholders.
+Unsupported decorations and special blocks receive approximation or omission notices. Fluids, entities, stored item inventories and gameplay payloads are ignored. Known copycat appearance data is read for structural conversion. Unknown modded blocks use placeholders.
 
 Minecraft input must have data version **3955**, for **Java 1.21.1**. Other versions receive an error. Litematic input supports format versions 5–7; output uses version 6.
 
 FtD output follows the inspected **3.8.5.11** blueprint schema, also checked against installed blueprint schemas saved by 4.2.5.2 and 4.3.1.11. The bundled MIT catalog is a fallback, with versioned native-shape corrections for ambiguous IDs. When available, FromTheCraft reads the installed game's `Core_*` item metadata and inherited beam footprints locally. This was checked against **4.3.4.0 build 1**, including stock blueprints. Set `FROMTHECRAFT_FTD` to the game folder or `StreamingAssets` folder for another installation. The older bundled catalog omits some newer IDs when the game isn't installed. The app reports those omissions. No game files are copied or bundled. Ordinary curved-hull shapes and thin plate slopes still use limited approximations. FtD version compatibility and in-game acceptance need further checks.
 
 Structure uploads are limited to 32 MiB. Texture ZIP/JAR imports have a separate 128 MiB total archive budget per session, with 512 MiB declared expanded data and 2,048-pixel image limits. Other limits are 128 MiB decompressed NBT, 500,000 occupied output cells, 2,048 cells per axis, and an 8,000,000-cell bounding volume.
+
+Projects allow at most 10,000 commands and 32 MiB. Static meshes have per-mesh vertex/triangle limits, a two-million-triangle scene preview budget and a cancellable sampling budget. Large decorative conversions may need a smaller scale or structure-only mode. Game acceptance remains unverified; the preview reparses the exact generated file but cannot establish how a game will load it.
 
 ## Development
 

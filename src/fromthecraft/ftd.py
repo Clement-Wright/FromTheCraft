@@ -31,6 +31,21 @@ SLOPE_IDS = {
 }
 LOCAL_CATALOG, CATALOG_INFO = installed_catalog(game_assets(), CATALOG)
 CATALOG.update(LOCAL_CATALOG)
+for _guid, _entry in CATALOG.items():
+    _material, _name = _entry["Material"], _entry["Name"].lower()
+    if _name in {_material.lower(), _material.lower() + " block", "light-weight alloy block"}:
+        _extent = _entry.get("Footprint") or FOOTPRINTS.get(str(_entry.get("SizeId")))
+        if _extent and all(_extent[a + "n"] + _extent[a + "p"] == 0 for a in "xyz"):
+            CUBE_IDS.setdefault(_material, _guid)
+CUBE_IDS.update(
+    {
+        "Alloy": "3cc75979-18ac-46c4-9a5b-25b327d99410",
+        "Heavy Armour": "0c03433e-8947-4e7d-9dec-793526fe06d1",
+        "Reinforced Wood": "2f7f61ae-79f1-4139-a790-3f2c26bda4e4",
+    }
+)
+for _material in ("Alloy", "Heavy Armour", "Reinforced Wood"):
+    CATALOG[CUBE_IDS[_material]].setdefault("Footprint", {axis + side: 0 for axis in "xyz" for side in "np"})
 COLORS = {
     "Metal": (0.45, 0.45, 0.45),
     "Wood": (0.56, 0.38, 0.2),
@@ -191,7 +206,11 @@ def read_blueprint(content: bytes) -> Scene:
                     f"Unresolved decoration {guid}: {reason if vertices is None else 'scene triangle budget reached'}"
                 ] += 1
                 return
-            record = replace(record, hide_host=data["hide_original"])
+            record = replace(
+                record,
+                hide_host=data["hide_original"],
+                name="Decoration: " + reason if record.kind == "decoration" else record.name,
+            )
             source_records.append(record)
             material = CATALOG.get(guid, {}).get("Material", "Metal")
             color = np.array(COLORS.get(material, COLORS["Metal"]))
@@ -293,10 +312,12 @@ def write_blueprint(cells, name="FromTheCraft"):
     dictionary = {"499": "e63040c9-0027-4fd3-be30-67fe3e950140"}
     ids = {}
     for position, part in sorted(cells.items()):
-        material = part.material if part.material in {"Wood", "Stone", "Glass"} else "Metal"
+        material = part.material if part.material in CUBE_IDS else "Metal"
+        if part.mapping_override and part.mapping_override.name.startswith("ftd:"):
+            material = CATALOG[part.mapping_override.name[4:]]["Material"]
         guid = CUBE_IDS[material]
         rot = 0
-        if part.shape.startswith("step_") and material in SLOPE_IDS:
+        if part.shape.startswith("step_") and material in SLOPE_IDS and not part.mapping_full:
             _, facing, half = part.shape.split("_")
             guid = SLOPE_IDS[material]
             rot = {"north": 0, "west": 1, "south": 2, "east": 3}[facing] + (12 if half == "top" else 0)

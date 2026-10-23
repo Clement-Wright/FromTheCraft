@@ -137,6 +137,77 @@ test("Minecraft sources offer hollowing for FtD output", async ({ page }) => {
   });
 });
 
+test("click selection, Ctrl toggle and overlapping source identities remain independent", async ({
+  page,
+}) => {
+  const records = ["first", "second"].map((id) => ({
+    id,
+    name: `${id} beam`,
+    type_key: "beam",
+    kind: "block",
+    path: [id],
+    parent_path: [],
+  }));
+  await page.route("**/api/source", (route) =>
+    route.fulfill({
+      json: {
+        notices: {},
+        source: {
+          ...display,
+          source_hash: "overlap",
+          records,
+          count: 2,
+          groups: [
+            {
+              ...display.groups[0],
+              source_ids: ["first", "second"],
+              block_indices: [1, 1],
+              matrices: [
+                ...display.groups[0].matrices,
+                ...display.groups[0].matrices,
+              ],
+              colors: [
+                ...display.groups[0].colors,
+                ...display.groups[0].colors,
+              ],
+            },
+          ],
+        },
+      },
+    }),
+  );
+  await page
+    .getByLabel("Open structure file")
+    .setInputFiles({
+      name: "overlap.blueprint",
+      mimeType: "application/json",
+      buffer: Buffer.from("{}"),
+    });
+  await expect(page.getByRole("status")).toContainText("Source ready");
+  const canvas = page.getByLabel("Source 3D structural preview");
+  const bounds = (await canvas.boundingBox())!;
+  await page.mouse.click(
+    bounds.x + bounds.width / 2,
+    bounds.y + bounds.height / 2,
+  );
+  await expect(page.getByTestId("selection-count")).toHaveText("1 selected");
+  await page.keyboard.down("Control");
+  await page.mouse.click(
+    bounds.x + bounds.width / 2,
+    bounds.y + bounds.height / 2,
+  );
+  await page.keyboard.up("Control");
+  await expect(page.getByTestId("selection-count")).toHaveText("0 selected");
+  await page.getByText("Overlapping hits (2)", { exact: true }).click();
+  await page
+    .getByRole("button", { name: "second beam / second", exact: true })
+    .click();
+  await expect(page.getByTestId("selection-count")).toHaveText("1 selected");
+  await expect(
+    page.getByRole("button", { name: "second beam / second", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+});
+
 test("clipped triangles cannot be inspected and clipping preserves the export", async ({
   page,
 }) => {

@@ -16,6 +16,12 @@ class EditLayer:
             if part.source_record:
                 self.records.setdefault(part.source_record.id, part.source_record)
         self.commands = []
+        self.command_sizes = []
+        self.type_ids, self.children = {}, {}
+        for key, record in self.records.items():
+            self.type_ids.setdefault(record.type_key, set()).add(key)
+            if record.host_id:
+                self.children.setdefault(record.host_id, set()).add(key)
         self.cursor = 0
         self.revision = 0
         self.excluded, self.hidden, self.mappings = set(), set(), {}
@@ -23,19 +29,22 @@ class EditLayer:
     def _replay(self):
         self.excluded, self.hidden, self.mappings = set(), set(), {}
         for command in self.commands[: self.cursor]:
-            ids, kind = command["ids"], command["kind"]
-            if kind == "exclude":
-                self.excluded.update(ids)
-            elif kind == "hide":
-                self.hidden.update(ids)
-            elif kind == "show":
-                self.hidden.difference_update(ids)
-            elif kind == "restore":
-                self.excluded.difference_update(ids)
-                for record in ids:
-                    self.mappings.pop(record, None)
-            elif kind == "mapping":
-                self.mappings.update({record: command["mapping"] for record in ids})
+            self._apply_one(command)
+
+    def _apply_one(self, command):
+        ids, kind = command["ids"], command["kind"]
+        if kind == "exclude":
+            self.excluded.update(ids)
+        elif kind == "hide":
+            self.hidden.update(ids)
+        elif kind == "show":
+            self.hidden.difference_update(ids)
+        elif kind == "restore":
+            self.excluded.difference_update(ids)
+            for record in ids:
+                self.mappings.pop(record, None)
+        elif kind == "mapping":
+            self.mappings.update({record: command["mapping"] for record in ids})
 
     def apply(self, command):
         if len(self.commands) >= 10_000:
@@ -61,15 +70,13 @@ class EditLayer:
         selected = set(ids)
         if not selected <= self.records.keys():
             raise ValueError("Unknown source record")
-        known_types = {record.type_key for record in self.records.values()}
-        if not set(types) <= known_types:
+        if not set(types) <= self.type_ids.keys():
             raise ValueError("Unknown source type")
-        selected.update(key for key, record in self.records.items() if record.type_key in types)
+        for key in types:
+            selected.update(self.type_ids[key])
         if not selected:
             raise ValueError("Select source records first")
-        children = {
-            key for key, record in self.records.items() if record.host_id in selected and key not in selected
-        }
+        children = set().union(*(self.children.get(key, set()) for key in selected)) - selected
         policy = command.get("attachments")
         if policy not in (None, "host", "all"):
             raise ValueError("Invalid attachment policy")
@@ -92,20 +99,27 @@ class EditLayer:
                 raise ValueError("Invalid mapping state")
             target = State(name, tuple(sorted(properties.items())))
             validate_state(target)
-            if name not in BUILDING_BLOCKS and not (
-                name in BLOCKS and name.endswith((":glass", "_stained_glass"))
+            from .ftd import CUBE_IDS
+
+            ftd_material = name.startswith("ftd:") and name[4:] in CUBE_IDS.values() and not properties
+            if (
+                not ftd_material
+                and name not in BUILDING_BLOCKS
+                and not (name in BLOCKS and name.endswith((":glass", "_stained_glass")))
             ):
                 raise ValueError("Choose a verified building material")
             full = mapping.get("full_block", False)
             if not isinstance(full, bool):
                 raise ValueError("Invalid full-block mapping option")
             clean["mapping"] = {"name": name, "properties": properties, "full_block": full}
-        commands = self.commands[: self.cursor] + [clean]
-        if len(json.dumps(commands).encode()) > 32 * 1024**2:
+        size = len(json.dumps(clean).encode()) + 2
+        if sum(self.command_sizes[: self.cursor]) + size > 32 * 1024**2:
             raise ValueError("Edit history exceeds 32 MiB")
+        commands = self.commands[: self.cursor] + [clean]
+        self.command_sizes = self.command_sizes[: self.cursor] + [size]
         self.commands, self.cursor = commands, len(commands)
         self.revision += 1
-        self._replay()
+        self._apply_one(clean)
         return kind not in {"hide", "show"}
 
     def undo(self):

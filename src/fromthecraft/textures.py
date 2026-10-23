@@ -390,10 +390,12 @@ class TextureLibrary:
                 return None
             folder = root / "versions" / version
             doc = self._local_json(folder / (version + ".json"))
+            downloads = doc.get("downloads")
+            download = downloads.get("client") if isinstance(downloads, dict) else None
             pinned = (
                 version == "1.21.1"
-                or doc.get("downloads", {}).get("client", {}).get("sha1")
-                == "30c73b1c5da787909b2f73340419fdf13b9def88"
+                or isinstance(download, dict)
+                and download.get("sha1") == "30c73b1c5da787909b2f73340419fdf13b9def88"
             )
             if pinned:
                 jar_id = doc.get("jar", version)

@@ -291,6 +291,10 @@ def checked_settings(settings, scene, layer):
     allowed = {b["name"] for slug in enabled for b in MODS[slug]["blocks"]}
     for command in layer.commands:
         mapping = command.get("mapping")
+        if mapping and mapping["name"].startswith("ftd:"):
+            if options.format != "blueprint":
+                raise ValueError("FtD mappings require FtD output")
+            continue
         if mapping and not mapping["name"].startswith("minecraft:") and mapping["name"] not in allowed:
             raise ValueError("Project mapping requires a disabled mod: " + mapping["name"])
     return options.model_dump()
@@ -329,10 +333,30 @@ def open_project(request: Request, document: dict):
 
 
 @app.get("/api/palette")
-def palette(request: Request, mods: str = ""):
+def palette(request: Request, mods: str = "", target: str = "nbt"):
     session_for(request)
     from .compatibility import BUILDING_BLOCKS, MOD_STATES, MODS
     from .palettes import BLOCKS
+
+    if target == "blueprint":
+        from .ftd import CUBE_IDS, COLORS
+
+        return {
+            "blocks": [
+                {
+                    "name": "ftd:" + guid,
+                    "label": material,
+                    "mod": "ftd",
+                    "material": material,
+                    "properties": {},
+                    "states": {},
+                    "rgb": COLORS.get(material, (0.5, 0.5, 0.5)),
+                }
+                for material, guid in sorted(CUBE_IDS.items())
+            ]
+        }
+    if target not in {"nbt", "litematic"}:
+        raise HTTPException(400, "Unknown target palette")
 
     try:
         enabled = selected_mods([m for m in mods.split(",") if m])
@@ -426,8 +450,18 @@ def palette_preview(request: Request, mapping: dict):
     session = session_for(request)
     record = SourceRecord("thumbnail", "thumbnail", "block", (), ())
     material, color = mc_material(mapping.get("name", ""))
+    native = mapping.get("name", "").startswith("ftd:")
+    if native:
+        from .ftd import CATALOG, CUBE_IDS, COLORS
+
+        guid = mapping["name"][4:]
+        if guid not in CUBE_IDS.values():
+            raise HTTPException(400, "Choose a verified native material")
+        material = CATALOG[guid]["Material"]
+        color = COLORS.get(material, (0.5, 0.5, 0.5))
     scene = Scene(
-        [Part("thumbnail", "cube", (1, 1, 1), np.eye(4), material, color, source_record=record)], "nbt"
+        [Part("thumbnail", "cube", (1, 1, 1), np.eye(4), material, color, source_record=record)],
+        "blueprint" if native else "nbt",
     )
     try:
         layer = EditLayer(scene)
