@@ -15,6 +15,7 @@ from .palettes import mc_material, mc_policy, validate_state
 from .copycats import block_entity, block_state_tag, geometry_boxes, read_material
 
 MAX_BYTES = 128 * 1024**2
+MAX_LIST_ITEMS = 8_000_000
 
 
 def parse_nbt(content):
@@ -54,7 +55,7 @@ def parse_nbt(content):
                 take(count * {7: 1, 11: 4, 12: 8}[tag])
             elif tag == 9:
                 item, count = number(">B"), number(">i")
-                if not 0 <= count <= MAX_VOLUME or (item == 0 and count):
+                if not 0 <= count <= MAX_LIST_ITEMS or (item == 0 and count):
                     raise ValueError("Invalid NBT list length")
                 for _ in range(count):
                     payload(item, depth + 1)

@@ -130,6 +130,24 @@ def cell_shape(mask):
     return "box"
 
 
+def merge_seed_masks(seed_masks, keys, octants, occupancy):
+    """Combine duplicates with integer operations while retaining insertion order."""
+    if len(keys) > 32:
+        unique, first, inverse = np.unique(keys, axis=0, return_index=True, return_inverse=True)
+        masks = np.zeros(len(unique), dtype=np.uint8)
+        np.bitwise_or.at(masks, inverse, np.left_shift(np.uint8(1), np.asarray(octants, dtype=np.uint8)))
+        order = np.argsort(first)
+        for index in order:
+            key = tuple(unique[index])
+            if key not in occupancy:
+                seed_masks[key] = seed_masks.get(key, 0) | int(masks[index])
+    else:
+        for position, octant in zip(keys, octants):
+            key = tuple(position)
+            if key not in occupancy:
+                seed_masks[key] = seed_masks.get(key, 0) | (1 << int(octant))
+
+
 def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=False):
     from .detail import DETAIL_SAMPLES, fit_detail
 
@@ -173,6 +191,14 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=Fals
             batch = candidates[start : start + batch_size]
             masks = None
             if not solid_box:
+                # Union with an already full cell cannot change either its
+                # occupancy or the first contributor that owns its material.
+                if occupancy:
+                    batch = batch[
+                        [occupancy.get(tuple(position - origin), 0) != full_mask for position in batch]
+                    ]
+                    if not len(batch):
+                        continue
                 points = (batch[:, None, :] + samples).reshape(-1, 3) / scale
                 local = (points @ inv[:3, :3].T + inv[:3, 3]) / part.size
                 masks = (
@@ -201,21 +227,22 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=Fals
                 for n in part.size
             ]
             seed_masks = {}
-            from .mesh_geometry import surface_seeds
+            from .mesh_geometry import surface_seed_batches
 
-            source_seeds = surface_seeds(part, scale, cancelled) if part.mesh else product(*axes)
-            while batch := list(islice(source_seeds, 4096)):
+            source_seeds = iter(product(*axes))
+            seed_batches = (
+                surface_seed_batches(part, scale, cancelled)
+                if part.mesh else iter(lambda: list(islice(source_seeds, 4096)), [])
+            )
+            for batch in seed_batches:
                 if cancelled and cancelled():
                     raise Cancelled("Conversion cancelled")
                 seeds = np.asarray(batch)
                 seeds = seeds * part.size if mesh_sampler else seeds[contains(part.shape, seeds)] * part.size
                 world_seeds = (seeds @ part.transform[:3, :3].T + part.transform[:3, 3]) * scale
                 positions = np.floor(world_seeds + 1e-7).astype(int)
-                octants = ((world_seeds - positions >= 0.5).astype(int) @ [4, 2, 1]).tolist()
-                for position, octant in zip(positions, octants):
-                    key = tuple(position - origin)
-                    if key not in occupancy:
-                        seed_masks[key] = seed_masks.get(key, 0) | (1 << octant)
+                octants = (world_seeds - positions >= 0.5).astype(int) @ [4, 2, 1]
+                merge_seed_masks(seed_masks, positions - origin, octants, occupancy)
             for position, mask in seed_masks.items():
                 previous, owner = fallback.get(position, (0, part))
                 if detailed:

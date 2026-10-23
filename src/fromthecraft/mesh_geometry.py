@@ -6,6 +6,16 @@ import numpy as np
 
 from .model import Cancelled
 
+try:
+    from . import _mesh_native
+except ImportError:
+    _mesh_native = None
+
+# Large decorative meshes can exceed the original limits even at 1x scale.
+# These bound cumulative work; temporary arrays remain batched independently.
+MAX_SURFACE_SEEDS = 200_000_000
+MAX_MESH_SAMPLE_WORK = 20_000_000_000
+
 
 def is_closed(vertices, indices):
     _, welded = np.unique(np.round(vertices, 7), axis=0, return_inverse=True)
@@ -19,7 +29,7 @@ def is_closed(vertices, indices):
     return bool(np.all(counts == 2))
 
 
-def surface_seeds(part, scale, cancelled=None):
+def _surface_seed_rows(part, scale, cancelled=None):
     vertices, indices = part.mesh[:2]
     emitted = 0
     for triangle in vertices[indices]:
@@ -37,7 +47,7 @@ def surface_seeds(part, scale, cancelled=None):
                 offsets.extend((delta, -delta))
         count = (divisions + 1) * (divisions + 2) // 2 * len(offsets)
         emitted += count
-        if emitted > 2_000_000:
+        if emitted > MAX_SURFACE_SEEDS:
             raise ValueError("Decorative surface seed budget exceeded; choose a smaller scale")
         for row in range(divisions + 1):
             if cancelled and cancelled():
@@ -45,7 +55,31 @@ def surface_seeds(part, scale, cancelled=None):
             v = np.arange(divisions - row + 1) / divisions
             points = a + (b - a) * (row / divisions) + v[:, None] * (c - a)
             for delta in offsets:
-                yield from np.clip(points + delta, 1e-5, 1 - 1e-5)
+                yield np.clip(points + delta, 1e-5, 1 - 1e-5)
+
+
+def surface_seed_batches(part, scale, cancelled=None):
+    """Keep original seed order and transform batch boundaries without Python rows."""
+    buffer = np.empty((4096, 3))
+    used = 0
+    for row in _surface_seed_rows(part, scale, cancelled):
+        start = 0
+        while start < len(row):
+            count = min(len(row) - start, len(buffer) - used)
+            buffer[used : used + count] = row[start : start + count]
+            used += count
+            start += count
+            if used == len(buffer):
+                yield buffer
+                buffer = np.empty((4096, 3))
+                used = 0
+    if used:
+        yield buffer[:used]
+
+
+def surface_seeds(part, scale, cancelled=None):
+    for row in _surface_seed_rows(part, scale, cancelled):
+        yield from row
 
 
 class MeshSampler:
@@ -60,6 +94,66 @@ class MeshSampler:
             self.triangles[:, :, 2] -= self.triangles[:, :, 0] * 0.3178372451957823
         self.low, self.high = self.triangles.min(1), self.triangles.max(1)
         self.tree = self._tree(np.arange(len(indices)))
+        self.geometry = {}
+        self.native_data = None
+        self.native_leaves = {}
+
+    def _native_arrays(self):
+        if self.native_data is None:
+            bounds, nodes, indices = [], [], []
+
+            def flatten(tree):
+                low, high, left, right = tree
+                index = len(nodes)
+                bounds.append(np.r_[low, high])
+                nodes.append(None)
+                if right is None:
+                    nodes[index] = (-1, -1, len(indices), len(left))
+                    indices.extend(left)
+                else:
+                    nodes[index] = (flatten(left), flatten(right), 0, 0)
+                return index
+
+            flatten(self.tree)
+            coefficients = np.zeros((len(self.triangles), 10 if self.closed else 38))
+            for i in range(len(self.triangles)):
+                if i % 256 == 0 and self.cancelled and self.cancelled():
+                    raise Cancelled("Conversion cancelled")
+                data = self._triangle(i)
+                if data is None:
+                    continue
+                if self.closed:
+                    a, ab, ac, denominator = data
+                    coefficients[i] = np.r_[a, ab, ac, denominator]
+                else:
+                    a, ab, ac, normal, norm2, aa, bb, cc, denominator, edges = data
+                    coefficients[i] = np.concatenate(
+                        [a, ab, ac, normal, [norm2, aa, bb, cc, denominator]]
+                        + [np.r_[start, direction, length] for start, direction, length in edges]
+                    )
+            self.native_data = (coefficients, np.asarray(bounds), np.asarray(nodes, dtype=np.intp),
+                                np.asarray(indices, dtype=np.intp))
+        return self.native_data
+
+    def _triangle(self, index):
+        if index not in self.geometry:
+            a, b, c = self.triangles[index]
+            ab, ac = b - a, c - a
+            if self.closed:
+                denominator = ab[1] * ac[2] - ab[2] * ac[1]
+                data = None if abs(denominator) < 1e-14 else (a, ab, ac, denominator)
+            else:
+                normal = np.cross(ab, ac)
+                norm2 = normal @ normal
+                aa, bb, cc = ab @ ab, ab @ ac, ac @ ac
+                denominator = aa * cc - bb * bb
+                edges = tuple((start, end - start, (end - start) @ (end - start))
+                              for start, end in ((a, b), (b, c), (c, a)))
+                data = (a, ab, ac, normal, norm2, aa, bb, cc, denominator, edges)
+                if norm2 < 1e-20 or denominator <= 1e-20:
+                    data = None
+            self.geometry[index] = data
+        return self.geometry[index]
 
     def _tree(self, ids):
         low, high = self.low[ids].min(0), self.high[ids].max(0)
@@ -97,43 +191,47 @@ class MeshSampler:
                 visit(right, candidates)
                 return
             self.work += len(candidates) * len(left)
-            if self.work > 200_000_000:
+            if self.work > MAX_MESH_SAMPLE_WORK:
                 raise ValueError(
                     "Decorative mesh sampling budget exceeded; choose a smaller scale or structure-only mode"
                 )
             p = points[candidates]
+            if not self.closed and _mesh_native is not None and points.dtype == np.float64:
+                key = id(left)
+                if key not in self.native_leaves:
+                    self.native_leaves[key] = (
+                        np.asarray([np.r_[low, high]]),
+                        np.asarray([[-1, -1, 0, len(left)]], dtype=np.intp),
+                        left,
+                    )
+                occupied, _, uncertain = _mesh_native.contains(
+                    p, self._native_arrays()[0], *self.native_leaves[key], False, self.radius
+                )
+                if not uncertain:
+                    result[candidates] |= np.frombuffer(occupied, dtype=np.uint8)
+                    return
             for index in left:
-                a, b, c = self.triangles[index]
-                ab, ac = b - a, c - a
+                data = self._triangle(index)
+                if data is None:
+                    continue
                 if self.closed:
-                    denominator = ab[1] * ac[2] - ab[2] * ac[1]
-                    if abs(denominator) < 1e-14:
-                        continue
+                    a, ab, ac, denominator = data
                     q = p - a
                     u = (q[:, 1] * ac[2] - q[:, 2] * ac[1]) / denominator
                     v = (ab[1] * q[:, 2] - ab[2] * q[:, 1]) / denominator
                     hit = (u >= 0) & (v >= 0) & (u + v < 1) & (a[0] + u * ab[0] + v * ac[0] > p[:, 0])
                     result[candidates] += hit
                 else:
-                    normal = np.cross(ab, ac)
-                    norm2 = normal @ normal
-                    if norm2 < 1e-20:
-                        continue
+                    a, ab, ac, normal, norm2, aa, bb, cc, denominator, edges = data
                     q = p - a
                     normal_distance = q @ normal
                     projected = q - normal_distance[:, None] * normal / norm2
-                    aa, bb, cc = ab @ ab, ab @ ac, ac @ ac
-                    denominator = aa * cc - bb * bb
-                    if denominator <= 1e-20:
-                        continue
                     u = (cc * (projected @ ab) - bb * (projected @ ac)) / denominator
                     v = (aa * (projected @ ac) - bb * (projected @ ab)) / denominator
                     distance = np.where(
                         (u >= 0) & (v >= 0) & (u + v <= 1), normal_distance**2 / norm2, np.inf
                     )
-                    for start, end in ((a, b), (b, c), (c, a)):
-                        edge = end - start
-                        length = edge @ edge
+                    for start, edge, length in edges:
                         if length < 1e-20:
                             continue
                         t = np.clip(((p - start) @ edge) / length, 0, 1)
@@ -143,6 +241,23 @@ class MeshSampler:
 
         # Bound temporary vectors independently of the caller's sampling batch.
         for start in range(0, len(points), 32768):
+            if self.cancelled and self.cancelled():
+                raise Cancelled("Conversion cancelled")
+            if (self.closed and _mesh_native is not None and points.dtype == np.float64
+                    and points.flags.c_contiguous):
+                occupied, work, uncertain = _mesh_native.contains(
+                    points[start : start + 32768], *self._native_arrays(), self.closed, self.radius
+                )
+                if not uncertain:
+                    self.work += work
+                    if self.work > MAX_MESH_SAMPLE_WORK:
+                        raise ValueError(
+                            "Decorative mesh sampling budget exceeded; choose a smaller scale or structure-only mode"
+                        )
+                    result[start : start + 32768] = np.frombuffer(occupied, dtype=np.uint8)
+                    continue
+                # Preserve original BLAS rounding for the complete original
+                # batch, rather than recalculating a differently sized subset.
             visit(self.tree, np.arange(start, min(len(points), start + 32768)))
         return (result % 2 != 0) if self.closed else (result != 0)
 

@@ -78,7 +78,7 @@ Minecraft input must have data version **3955**, for **Java 1.21.1**. Other vers
 
 FtD output follows the inspected **3.8.5.11** blueprint schema, also checked against installed blueprint schemas saved by 4.2.5.2 and 4.3.1.11. The bundled MIT catalog is a fallback, with versioned native-shape corrections for ambiguous IDs. When available, FromTheCraft reads the installed game's `Core_*` item metadata and inherited beam footprints locally. This was checked against **4.3.4.0 build 1**, including stock blueprints. Set `FROMTHECRAFT_FTD` to the game folder or `StreamingAssets` folder for another installation. The older bundled catalog omits some newer IDs when the game isn't installed. The app reports those omissions. No game files are copied or bundled. Ordinary curved-hull shapes and thin plate slopes still use limited approximations. FtD version compatibility and in-game acceptance need further checks.
 
-Structure uploads are limited to 32 MiB. Texture ZIP/JAR imports have a separate 128 MiB total archive budget per session, with 512 MiB declared expanded data and 2,048-pixel image limits. Other limits are 128 MiB decompressed NBT, 500,000 occupied output cells, 2,048 cells per axis, and an 8,000,000-cell bounding volume.
+Structure uploads are limited to 32 MiB. Texture ZIP/JAR imports have a separate 128 MiB total archive budget per session, with 512 MiB declared expanded data and 2,048-pixel image limits. Other limits are 128 MiB decompressed NBT, 500,000 occupied output cells, 2,048 cells per axis, and a 128,000,000-cell bounding volume.
 
 Projects allow at most 10,000 commands and 32 MiB. Static meshes have per-mesh vertex/triangle limits, a two-million-triangle scene preview budget and a cancellable sampling budget. Large decorative conversions may need a smaller scale or structure-only mode. Game acceptance remains unverified; the preview reparses the exact generated file but cannot establish how a game will load it.
 
@@ -96,6 +96,11 @@ Set-Location ..
 ```
 
 Tests and Windows packaging:
+
+The portable build includes a native decorative-mesh sampler and requires the
+Visual Studio C++ build tools with a Windows SDK. It uses strict floating-point
+arithmetic and retains the NumPy path for boundary cases. Source installations
+without a C compiler use the NumPy sampler.
 
 ```powershell
 .venv\Scripts\python -m pytest

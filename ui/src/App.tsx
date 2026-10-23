@@ -483,7 +483,7 @@ export default function App() {
     ),
   );
   const volume = dimensions?.reduce((a, b) => a * b, 1) ?? 0;
-  const tooLarge = volume > 8_000_000 || dimensions?.some((n) => n > 2048);
+  const tooLarge = volume > 128_000_000 || dimensions?.some((n) => n > 2048);
   const notices = status.notices ?? sourceNotices;
   const noticeCount = Object.values(notices).reduce((a, b) => a + b, 0);
   const busy = status.state === "working" || status.state === "loading";

@@ -17,6 +17,10 @@ try {
 } finally { Pop-Location }
 & $pythonExe scripts/collect_licenses.py
 if ($LASTEXITCODE -ne 0) { throw 'License collection failed.' }
+& $pythonExe setup.py build_ext --inplace
+if ($LASTEXITCODE -ne 0) { throw 'Native mesh sampler build failed.' }
+& $pythonExe -c 'from fromthecraft import _mesh_native'
+if ($LASTEXITCODE -ne 0) { throw 'Native mesh sampler is missing from this build.' }
 & $pythonExe -m PyInstaller --noconfirm --clean --windowed --onedir --name FromTheCraft --distpath $outputRoot --paths src --collect-data fromthecraft --collect-all UnityPy --collect-data archspec --exclude-module fmod_toolkit --exclude-module pyfmodex --copy-metadata litemapy --add-data 'build/THIRD_PARTY_LICENSES;THIRD_PARTY_LICENSES' scripts/portable_entry.py
 if ($LASTEXITCODE -ne 0) { throw 'Windows packaging failed.' }
 Copy-Item -LiteralPath README.md -Destination (Join-Path $portableFolder 'README.md')

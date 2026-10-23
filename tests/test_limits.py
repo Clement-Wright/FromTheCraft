@@ -50,3 +50,33 @@ def test_skipped_blocks_still_count_toward_input_limit(monkeypatch):
     root = dict(BLP=[], BLR=[], BCI=[], BlockIds=[], SCs=[child, child])
     with pytest.raises(ValueError, match="blocks"):
         ftd.read_blueprint(json.dumps({"Blueprint": root, "ItemDictionary": {"0": guid}}).encode())
+
+
+def test_sparse_structure_can_use_a_128_million_cell_bounding_volume():
+    import numpy as np
+    from fromthecraft.convert import convert
+    from fromthecraft.model import Part, Scene
+
+    far = np.eye(4)
+    far[:3, 3] = (499, 499, 511)
+    source = Scene([
+        Part("near", "box", (1, 1, 1), np.eye(4), "Metal", (0.5, 0.5, 0.5)),
+        Part("far", "box", (1, 1, 1), far, "Metal", (0.5, 0.5, 0.5)),
+    ], "blueprint")
+    result = convert(source, "nbt")
+    assert len(result.scene.parts) == 2
+    assert {tuple(p.transform[:3, 3]) for p in result.scene.parts} == {(0, 0, 0), (499, 499, 511)}
+
+
+def test_bounding_volume_still_rejects_more_than_128_million_cells():
+    from fromthecraft.geometry import checked_size
+
+    with pytest.raises(ValueError, match="bounding-volume"):
+        checked_size((501, 500, 512))
+
+
+def test_larger_geometry_bounds_do_not_raise_the_nbt_list_length_guard():
+    # A declared list length is checked before attempting to read its elements.
+    content = b"\x0a\0\0\x09\0\x01a\x01" + struct.pack(">i", 8_000_001)
+    with pytest.raises(ValueError, match="Invalid NBT list length"):
+        parse_nbt(content)

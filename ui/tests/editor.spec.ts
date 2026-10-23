@@ -1,6 +1,38 @@
 import { test, expect } from "@playwright/test";
 import path from "node:path";
 
+test("large sparse bounds use the increased conversion limit", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: "Open file", exact: true }),
+  ).toBeEnabled();
+  const fs = await import("node:fs/promises");
+  const document = JSON.parse(
+    await fs.readFile("../tests/fixtures/asymmetric.blueprint", "utf8"),
+  );
+  const root = document.Blueprint;
+  root.BLP = ["0,0,0", "299,299,299"];
+  root.BLR = [0, 0];
+  root.BCI = [0, 0];
+  root.BlockIds = [root.BlockIds[0], root.BlockIds[0]];
+  root.SCs = [];
+  await page.getByLabel("Open structure file").setInputFiles({
+    name: "large-sparse.blueprint",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(document)),
+  });
+  await expect(page.getByRole("status")).toContainText("Source ready");
+  await expect(
+    page.getByText("Original source bounds exceed", { exact: false }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Convert", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("ready to export");
+  const result = await page.request.get("/api/status").then((r) => r.json());
+  expect(result.converted.count).toBe(2);
+});
+
 test("oversized original bounds do not prevent converting after exclusions", async ({
   page,
 }) => {

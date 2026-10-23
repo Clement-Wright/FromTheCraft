@@ -102,6 +102,7 @@ def test_separate_corner_details_cannot_be_replaced_by_an_open_board_shell():
         "blueprint",
     )
     result = convert(source, "nbt", mods=("copycats",), detailed_copycats=True)
+    assert {part.identity for part in result.scene.parts} == {"copycats:copycat_byte"}
     # Include points on both sides of a board's 1/16 inner boundary.
     corner = np.array(list(product((0.03125, 0.09375), repeat=3)))
     points = np.concatenate((corner, corner + 0.875))
