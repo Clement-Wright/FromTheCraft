@@ -66,7 +66,10 @@ def test_optimized_conversion_preserves_original_export_bytes(monkeypatch, detai
     options = dict(mods=tuple(MODS), detailed_copycats=detailed, hollow=hollow,
                    preference="color", decoration_mode="appearance", surface_thickness=0.125)
     actual = convert(source, output, **options)
-    monkeypatch.setattr(module, "voxelize", reference_voxelize)
+    def original(*args, compact=False, **kwargs):
+        return reference_voxelize(*args, **kwargs)
+
+    monkeypatch.setattr(module, "voxelize", original)
     expected = convert(source, output, **options)
     assert actual.content == expected.content
     assert actual.offset == expected.offset

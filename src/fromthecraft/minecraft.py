@@ -111,6 +111,24 @@ def _entity_factory():
 
 def write_structure(cells: dict, size) -> bytes:
     checked_size(size)
+    try:
+        ordinary = all(
+            len(pos) == 3
+            and all(isinstance(n, (int, np.integer)) and -(2**31) <= int(n) < 2**31 for n in pos)
+            for pos in cells
+        )
+    except TypeError:
+        ordinary = False
+    if ordinary:
+        from .nbt_output import encode_structure
+
+        return encode_structure(cells, size, _entity_factory())
+    return _write_structure_tags(cells, size)
+
+
+def _write_structure_tags(cells, size):
+    """Retain nbtlib's coordinate coercion and errors for unusual public inputs."""
+    checked_size(size)
     palette, indices, blocks = [], {}, []
     entity_at = _entity_factory()
     for position, state in sorted(cells.items()):

@@ -213,7 +213,8 @@ def merge_seed_masks(seed_masks, keys, octants, occupancy):
                 seed_masks[key] = seed_masks.get(key, 0) | (1 << int(octant))
 
 
-def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=False, extreme=False):
+def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=False, extreme=False, compact=False):
+    """Sample source parts; compact shares identical cells for read-only conversion."""
     from concurrent.futures import ThreadPoolExecutor
     from .mesh_geometry import native_worker_count
 
@@ -221,7 +222,7 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=Fals
     workers = ThreadPoolExecutor(max_workers=native_threads, thread_name_prefix="mesh-samples")
     wait_for_workers = True
     try:
-        return _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers, native_threads)
+        return _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers, native_threads, compact)
     except Cancelled:
         # Running chunks retain their own read-only inputs and discard results.
         # Do not hold up cancellation while those bounded queries finish.
@@ -231,7 +232,7 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=Fals
         workers.shutdown(wait=wait_for_workers, cancel_futures=True)
 
 
-def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers, native_threads):
+def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers, native_threads, compact=False):
     from .detail import DETAIL_SAMPLES, fit_detail
 
     detailed = detailed or extreme
@@ -386,6 +387,7 @@ def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers, nat
     if len(cells) > MAX_PARTS:
         raise ValueError(f"Output exceeds {MAX_PARTS:,} occupied cells; choose a smaller scale or structure")
     full_sources = {}
+    fit_owner, fitted = None, {}
     for index, (position, part) in enumerate(cells.items()):
         if index % 256 == 0:
             if cancelled and cancelled():
@@ -393,6 +395,11 @@ def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers, nat
             if progress:
                 progress(0.75 + 0.03 * index / max(1, len(cells)))
         mask = occupancy[position]
+        if compact and part is not fit_owner:
+            # First-owner insertion order groups a source record's cells.
+            # Reuse values only inside that group; source identities never merge.
+            fit_owner = part
+            fitted.clear()
         if extreme:
             from .extreme import fit_extreme, exposed_samples
 
@@ -406,20 +413,31 @@ def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers, nat
             sources = tuple(contributions.pop(position).values())
             if len(sources) == 1 and sources[0][1] == full_mask:
                 sources = full_sources.setdefault(id(sources[0][0]), sources)
-            cells[position] = replace(
-                part,
+            surface = exposed_samples(mask, tuple(neighbors))
+            cache_key = (
+                (id(sources[0][0]), surface)
+                if mask == full_mask and len(sources) == 1 and sources[0][1] == full_mask
+                else None
+            )
+            changes = dict(
                 shape="extreme",
                 state=fit_extreme(mask),
                 detail_sources=sources,
-                detail_surface=exposed_samples(mask, tuple(neighbors)),
+                detail_surface=surface,
             )
         elif detailed:
             target = fit_detail(mask)
-            cells[position] = (
-                replace(part, shape="detailed", state=target) if target else replace(part, shape="box")
-            )
+            cache_key = (target,)
+            changes = dict(shape="detailed", state=target) if target else dict(shape="box")
         else:
-            cells[position] = replace(part, shape=_cell_shape_bits(mask))
+            shape = _cell_shape_bits(mask)
+            cache_key, changes = (shape,), dict(shape=shape)
+        result = fitted.get(cache_key) if compact and cache_key is not None else None
+        if result is None:
+            result = replace(part, **changes)
+            if compact and cache_key is not None and len(fitted) < 256:
+                fitted[cache_key] = result
+        cells[position] = result
     return cells, tuple(float(n) for n in origin)
 
 

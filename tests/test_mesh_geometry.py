@@ -175,3 +175,47 @@ def test_surface_seed_batches_preserve_every_original_point_and_order(closed):
     assert all(len(batch) == 4096 for batch in batches[:-1])
     assert 0 < len(batches[-1]) <= 4096
     np.testing.assert_array_equal(np.concatenate(batches), expected)
+def test_three_component_normals_keep_the_original_float_bits():
+    import fromthecraft.mesh_geometry as mesh
+
+    rng = np.random.default_rng(717)
+    left = rng.normal(size=(256, 3)) * np.exp2(rng.integers(-100, 100, (256, 1)))
+    right = rng.normal(size=(256, 3)) * np.exp2(rng.integers(-100, 100, (256, 1)))
+    left[:2] = ((0.0, -0.0, 1.0), (1.0, 0.0, -0.0))
+    right[:2] = ((-0.0, 0.0, 1.0), (0.0, -0.0, 1.0))
+    assert hasattr(mesh, "_cross3")
+    for a, b in zip(left, right):
+        np.testing.assert_array_equal(mesh._cross3(a, b).view(np.uint64), np.cross(a, b).view(np.uint64))
+
+
+@pytest.mark.parametrize("closed", [False, True])
+def test_native_coefficients_pack_without_repeated_index_trick_arrays(monkeypatch, closed):
+    from fromthecraft.mesh_geometry import MeshSampler
+
+    rng = np.random.default_rng(718)
+    vertices = rng.normal(size=(123, 3))
+    vertices[3:6] = 0  # Preserve zero coefficient rows for degenerate triangles.
+    sampler = MeshSampler(vertices, np.arange(123).reshape(-1, 3), closed=closed)
+    expected = np.zeros((41, 10 if closed else 38))
+    for i in range(41):
+        data = sampler._triangle(i)
+        if data is None:
+            continue
+        if closed:
+            a, ab, ac, denominator = data
+            expected[i] = np.r_[a, ab, ac, denominator]
+        else:
+            a, ab, ac, normal, norm2, aa, bb, cc, denominator, edges = data
+            expected[i] = np.concatenate([a, ab, ac, normal, [norm2, aa, bb, cc, denominator]]
+                + [np.r_[start, direction, length] for start, direction, length in edges])
+    calls, getter = 0, type(np.r_).__getitem__
+
+    def counted(self, key):
+        nonlocal calls
+        calls += 1
+        return getter(self, key)
+
+    monkeypatch.setattr(type(np.r_), "__getitem__", counted)
+    actual = sampler._native_arrays()[0]
+    np.testing.assert_array_equal(actual.view(np.uint64), expected.view(np.uint64))
+    assert calls == 0, "Fill the final coefficient buffer rather than allocating per-triangle joins"

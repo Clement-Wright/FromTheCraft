@@ -26,6 +26,13 @@ def native_worker_count():
     return max(1, min(8, cpu_count() or 1))
 
 
+def _cross3(a, b):
+    """The original cross-product arithmetic for the fixed three-component case."""
+    return np.array(
+        [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+    )
+
+
 @lru_cache(maxsize=64)
 def _seed_template(divisions, offset_count):
     # Preserve row/offset/point order and the original divisions exactly. Only
@@ -63,7 +70,7 @@ def _surface_seed_rows(part, scale, cancelled=None):
         divisions = max(1, int(np.ceil(np.linalg.norm(edges, axis=1).max() * scale * 4)))
         offsets = [np.zeros(3)]
         if not part.mesh[2]:
-            normal = np.cross(edges[0], edges[1])
+            normal = _cross3(edges[0], edges[1])
             length = np.linalg.norm(normal)
             if length > 1e-12:
                 delta = np.linalg.solve(part.transform[:3, :3], normal / length * part.mesh[3] * 0.4999)
@@ -211,7 +218,7 @@ class MeshSampler:
             def flatten(tree):
                 low, high, left, right = tree
                 index = len(nodes)
-                bounds.append(np.r_[low, high])
+                bounds.append((low, high))
                 nodes.append(None)
                 if right is None:
                     nodes[index] = (-1, -1, len(indices), len(left))
@@ -228,18 +235,22 @@ class MeshSampler:
                 data = self._triangle(i)
                 if data is None:
                     continue
+                row = coefficients[i]
+                row[:3], row[3:6], row[6:9] = data[:3]
                 if self.closed:
-                    a, ab, ac, denominator = data
-                    coefficients[i] = np.r_[a, ab, ac, denominator]
+                    row[9] = data[3]
                 else:
                     a, ab, ac, normal, norm2, aa, bb, cc, denominator, edges = data
-                    coefficients[i] = np.concatenate(
-                        [a, ab, ac, normal, [norm2, aa, bb, cc, denominator]]
-                        + [np.r_[start, direction, length] for start, direction, length in edges]
-                    )
+                    row[9:12] = normal
+                    row[12:17] = norm2, aa, bb, cc, denominator
+                    for edge, (start, direction, length) in enumerate(edges):
+                        offset = 17 + 7 * edge
+                        row[offset : offset + 3] = start
+                        row[offset + 3 : offset + 6] = direction
+                        row[offset + 6] = length
             self.native_data = (
                 coefficients,
-                np.asarray(bounds),
+                np.asarray(bounds).reshape(-1, 6),
                 np.asarray(nodes, dtype=np.intp),
                 np.asarray(indices, dtype=np.intp),
             )
@@ -253,7 +264,7 @@ class MeshSampler:
                 denominator = ab[1] * ac[2] - ab[2] * ac[1]
                 data = None if abs(denominator) < 1e-14 else (a, ab, ac, denominator)
             else:
-                normal = np.cross(ab, ac)
+                normal = _cross3(ab, ac)
                 norm2 = normal @ normal
                 aa, bb, cc = ab @ ab, ab @ ac, ac @ ac
                 denominator = aa * cc - bb * bb
@@ -316,7 +327,7 @@ class MeshSampler:
                 key = id(left)
                 if key not in self.native_leaves:
                     self.native_leaves[key] = (
-                        np.asarray([np.r_[low, high]]),
+                        np.asarray((low, high)).reshape(1, 6),
                         np.asarray([[-1, -1, 0, len(left)]], dtype=np.intp),
                         left,
                     )

@@ -81,7 +81,7 @@ def convert(
             progress(0.78)
     else:
         cells, offset = voxelize(
-            scene, scale, progress, cancelled, detailed=detailed_copycats or extreme_detail, **options
+            scene, scale, progress, cancelled, detailed=detailed_copycats or extreme_detail, compact=True, **options
         )
     if not cells:
         raise ValueError("No structural blocks remain after skipped blocks")
@@ -103,6 +103,7 @@ def convert(
             elif part.shape.startswith("step_"):
                 notices["Approximated Minecraft stairs with ordinary FtD slopes"] += 1
         content = write_blueprint(cells)
+        del cells
         notices["FtD output schema targets reference version 3.8.5.11; in-game acceptance is unverified"] += 1
         return Result(content, read_blueprint(content), output, offset, notices)
     for part in cells.values():
@@ -110,14 +111,22 @@ def convert(
             notices[
                 "Approximated partial glass with full transparent blocks; vanilla has no glass slabs or stairs"
             ] += 1
-    states = {}
+    states, state_cache = {}, {}
     for index, (position, part) in enumerate(cells.items()):
         if index % 256 == 0:
             if cancelled and cancelled():
                 raise Cancelled("Conversion cancelled")
             if progress:
                 progress(0.88 + 0.03 * index / max(1, len(cells)))
-        states[position] = mc_target(part, preference, mods)
+        identifier = id(part)
+        target = state_cache.get(identifier) if not cached else None
+        if target is None:
+            target = mc_target(part, preference, mods)
+            if not cached:
+                if len(state_cache) >= 4096:
+                    state_cache.clear()
+                state_cache[identifier] = target
+        states[position] = target
     full_fallbacks = sum(
         part.shape.startswith(("slab_", "step_"))
         and not states[pos].copied_material
@@ -145,6 +154,9 @@ def convert(
     if cancelled and cancelled():
         raise Cancelled("Conversion cancelled")
     content = writer(states, size)
+    # Reimport the actual export for preview after releasing the sampling and
+    # target grids, rather than retaining both while allocating a second ship.
+    del cells, states, state_cache
     if cancelled and cancelled():
         raise Cancelled("Conversion cancelled")
     if progress:
