@@ -19,7 +19,7 @@ except ImportError:
 # Large decorative meshes can exceed the original limits even at 1x scale.
 # These bound cumulative work; temporary arrays remain batched independently.
 MAX_SURFACE_SEEDS = 200_000_000
-MAX_MESH_SAMPLE_WORK = 20_000_000_000
+MAX_MESH_SAMPLE_WORK = 2_000_000_000_000
 
 
 def native_worker_count():

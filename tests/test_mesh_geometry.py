@@ -10,9 +10,22 @@ def test_sampling_continues_beyond_the_former_budget():
     assert sampler.contains([[1 / 3, 1 / 3, 1 / 3]]).tolist() == [True]
 
 
-def test_sampling_retains_a_finite_budget():
+@pytest.mark.parametrize("native", [False, True])
+def test_sampling_continues_beyond_twenty_billion_work_units(monkeypatch, native):
+    from fromthecraft import mesh_geometry
+
+    if native and mesh_geometry._mesh_native is None:
+        pytest.skip("Native sampler is not installed")
+    if not native:
+        monkeypatch.setattr(mesh_geometry, "_mesh_native", None)
     sampler = MeshSampler(np.eye(3), np.array([[0, 1, 2]]), closed=False)
     sampler.work = 20_000_000_000
+    assert sampler.contains([[1 / 3, 1 / 3, 1 / 3]]).tolist() == [True]
+
+
+def test_sampling_retains_a_finite_budget():
+    sampler = MeshSampler(np.eye(3), np.array([[0, 1, 2]]), closed=False)
+    sampler.work = 2_000_000_000_000
     with pytest.raises(ValueError, match="Decorative mesh sampling budget exceeded"):
         sampler.contains([[1 / 3, 1 / 3, 1 / 3]])
 
@@ -21,7 +34,7 @@ def test_sampling_can_be_cancelled_after_crossing_the_former_budget():
     from fromthecraft.model import Cancelled
 
     sampler = MeshSampler(np.eye(3), np.array([[0, 1, 2]]), cancelled=lambda: True)
-    sampler.work = 200_000_000
+    sampler.work = 20_000_000_000
     with pytest.raises(Cancelled):
         sampler.contains([[1 / 3, 1 / 3, 1 / 3]])
 
