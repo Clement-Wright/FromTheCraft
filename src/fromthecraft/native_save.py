@@ -34,21 +34,38 @@ def choose_save_file(filename, directory=""):
     try:
         dialog = ctypes.WinDLL("comdlg32", use_last_error=True)
         user = ctypes.WinDLL("user32", use_last_error=True)
-        user.GetForegroundWindow.argtypes = []
-        user.GetForegroundWindow.restype = wintypes.HWND
+        user.GetParent.argtypes = [wintypes.HWND]
+        user.GetParent.restype = wintypes.HWND
+        user.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
+                                     ctypes.c_int, ctypes.c_int, wintypes.UINT]
+        user.SetWindowPos.restype = wintypes.BOOL
+        user.SetForegroundWindow.argtypes = [wintypes.HWND]
+        user.SetForegroundWindow.restype = wintypes.BOOL
         dialog.GetSaveFileNameW.argtypes = [ctypes.POINTER(OpenFilename)]
         dialog.GetSaveFileNameW.restype = wintypes.BOOL
         dialog.CommDlgExtendedError.argtypes = []
         dialog.CommDlgExtendedError.restype = wintypes.DWORD
         buffer = ctypes.create_unicode_buffer(filename, 32768)
         extension = Path(filename).suffix.lstrip(".")
+
+        @ctypes.WINFUNCTYPE(ctypes.c_size_t, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
+        def show_dialog(window, message, _wparam, _lparam):
+            if message == 0x110:  # WM_INITDIALOG: Explorer hook belongs to the dialog's child.
+                parent = user.GetParent(window)
+                # A background launcher may specify SW_HIDE for its first window.
+                # Show this user-requested dialog independently of unrelated apps.
+                user.SetWindowPos(parent, -1, 0, 0, 0, 0, 0x1 | 0x2 | 0x40)
+                user.SetForegroundWindow(parent)
+            return 0
+
         options = OpenFilename(
-            lStructSize=ctypes.sizeof(OpenFilename), hwndOwner=user.GetForegroundWindow(),
+            lStructSize=ctypes.sizeof(OpenFilename), hwndOwner=None,
             lpstrFilter=f"Converted structure (*.{extension})\0*.{extension}\0\0",
             nFilterIndex=1, lpstrFile=ctypes.cast(buffer, wintypes.LPWSTR), nMaxFile=len(buffer),
             lpstrInitialDir=directory or None, lpstrTitle="Save converted structure",
             # Explorer UI, overwrite confirmation, existing folder, unchanged process CWD.
-            Flags=0x80000 | 0x2 | 0x800 | 0x8, lpstrDefExt=extension,
+            Flags=0x80000 | 0x2 | 0x800 | 0x8 | 0x20, lpstrDefExt=extension,
+            lpfnHook=ctypes.cast(show_dialog, ctypes.c_void_p),
         )
         if dialog.GetSaveFileNameW(ctypes.byref(options)):
             return Path(buffer.value)
