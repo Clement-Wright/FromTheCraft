@@ -1,10 +1,10 @@
-"""Freeze fitter behavior before replacing sample-wise loops with bit operations."""
+"""Check pruning against the exhaustive fitter with the current quality criterion."""
 
 import numpy as np
 import pytest
 
 from fromthecraft.detail import DETAIL_SAMPLES, bits, fit_detail
-from detail_reference import fit_detail as reference_fit
+from detail_reference import fit_detail as reference_fit, silhouette_error
 
 
 def test_fitter_optimization_preserves_exact_states_on_arbitrary_and_geometric_masks():
@@ -21,7 +21,7 @@ def test_fitter_optimization_preserves_exact_states_on_arbitrary_and_geometric_m
     masks += [bits(samples[:, 1] + samples[:, 2] / length <= 1) for length in (1, 2, 3, 4)]
     masks += [0, (1 << len(samples)) - 1]
     for mask in masks:
-        assert fit_detail(mask) == reference_fit(mask)
+        assert fit_detail(mask) == reference_fit(mask, compact=True)
 
 
 @pytest.mark.parametrize("extreme", [False, True])
@@ -60,10 +60,14 @@ def test_covering_pruning_preserves_states_including_all_dynamic_half_layer_pair
         masks.extend(a | b for a in groups[0] for b in groups[1])
     masks.extend(bits(np.random.default_rng(i).random(len(DETAIL_SAMPLES)) < 0.4) for i in range(25))
     for mask in masks:
-        assert fit_detail(mask) == reference_fit(mask)
+        assert fit_detail(mask) == reference_fit(mask, compact=True)
         expected = min(
             (*extra_candidates(), *detail_choices(mask)),
-            key=lambda item: ((mask & ~item[1]).bit_count(), ((mask ^ item[1]) & VOLUME_MASK).bit_count()),
+            key=lambda item: (
+                (mask & ~item[1]).bit_count(),
+                silhouette_error(mask, item[1]),
+                ((mask ^ item[1]) & VOLUME_MASK).bit_count(),
+            ),
         )[0]
         # The pre-optimization full-mask shortcut takes precedence over ties.
         assert fit_extreme(mask) == (None if mask == (1 << len(DETAIL_SAMPLES)) - 1 else expected)

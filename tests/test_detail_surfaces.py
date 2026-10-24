@@ -29,6 +29,29 @@ def test_eighth_block_details_keep_their_real_extent_after_serialization(size):
     np.testing.assert_allclose(highs.max(0), size)
 
 
+@pytest.mark.parametrize("extreme", [False, True])
+@pytest.mark.parametrize("orientation", range(24))
+def test_thin_trim_near_a_lip_does_not_become_a_full_height_board(extreme, orientation):
+    # Minimized from a Cygnus Wood down slope decoration: a thin skin along
+    # one side of the cell occupies only its top quarter. A full-height board
+    # has less volume than a half-height panel, but adds an exposed wall below.
+    transform = np.eye(4)
+    transform[:3, :3] = rotation(orientation)
+    transform[:3, 3] = rotation(orientation) @ (0, 0.75, 0)
+    source = Scene(
+        [Part("lip trim", "box", (1 / 32, 0.25, 1), transform, "Metal", (0.8, 0.8, 0.8))], "blueprint"
+    )
+    result = convert(source, "nbt", mods=("copycats",), detailed_copycats=True, extreme_detail=extreme)
+    output = []
+    for part in result.scene.parts:
+        corners = np.array(list(product(*[(0, extent) for extent in part.size])))
+        world = corners @ part.transform[:3, :3].T + part.transform[:3, 3] + result.offset
+        output.append(world @ rotation(orientation))
+    points = np.concatenate(output)
+    assert points[:, 1].min() >= 0.5 - 1e-8
+    assert points[:, 1].max() <= 1 + 1e-8
+
+
 @pytest.mark.parametrize("output", ["nbt", "litematic"])
 @pytest.mark.parametrize("orientation", range(24))
 def test_continuous_slope_has_no_holes_in_its_projected_hull(output, orientation):

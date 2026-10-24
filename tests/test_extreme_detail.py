@@ -181,7 +181,7 @@ def test_thin_colored_details_use_equivalent_multi_material_shapes(output, thick
     np.testing.assert_array_equal(occupied(result.scene, world, result.offset), points[:, 1] <= thickness)
 
 
-def test_small_decoration_keeps_its_color_on_a_larger_host_without_opening_holes():
+def test_small_decoration_does_not_repaint_an_entire_host_byte_or_open_holes():
     host = Part("white host", "box", (1, 1, 1), np.eye(4), "Stone", (0.95, 0.95, 0.95))
     transform = np.eye(4)
     transform[:3, 3] = (0.875, 0.875, 0.875)
@@ -194,12 +194,15 @@ def test_small_decoration_keeps_its_color_on_a_larger_host_without_opening_holes
         preference="color",
         decoration_mode="decorations",
     )
-    assert any(p.color[1] > p.color[0] + 0.1 for p in result.scene.parts)
+    # A 1/8-cube accent is far smaller than the 1/2-cube independently painted
+    # region available inside a full block. Painting that whole region inflates
+    # the mark by 64x. Retain the locally dominant host until scale can resolve it.
+    assert all(p.color[0] > 0.8 for p in result.scene.parts)
     points = np.random.default_rng(983).uniform(0.001, 0.999, (1000, 3))
     assert occupied(result.scene, points, result.offset).all()
 
 
-def test_tiny_accent_between_volume_probes_is_retained_in_a_byte():
+def test_tiny_accent_between_volume_probes_does_not_become_a_half_block_patch():
     host = Part("white host", "box", (1, 1, 1), np.eye(4), "Stone", (0.95, 0.95, 0.95))
     transform = np.eye(4)
     transform[:3, 3] = (0.507, 0.507, 0.99)
@@ -212,7 +215,7 @@ def test_tiny_accent_between_volume_probes_is_retained_in_a_byte():
         preference="color",
         decoration_mode="decorations",
     )
-    assert any(p.color[1] > p.color[0] + 0.1 for p in result.scene.parts)
+    assert all(p.color[0] > 0.8 for p in result.scene.parts)
 
 
 def test_repeated_decoration_colors_keep_local_overlay_order():

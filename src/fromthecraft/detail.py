@@ -34,6 +34,34 @@ def bits(mask):
 OCTANT_MASKS = tuple(bits(OCTANTS == i) for i in range(8))
 FULL_MASK = (1 << len(DETAIL_SAMPLES)) - 1
 
+_PROJECTIONS = tuple(
+    tuple(
+        (float(value), bits(DETAIL_SAMPLES[:, axis] == value)) for value in np.unique(DETAIL_SAMPLES[:, axis])
+    )
+    for axis in range(3)
+)
+
+
+@lru_cache(maxsize=8192)
+def projected_bounds(mask):
+    """Sample extents, including hull probes, without unpacking per candidate."""
+    return tuple(
+        (
+            next((value for value, plane in planes if mask & plane), 0),
+            next((value for value, plane in reversed(planes) if mask & plane), 0),
+        )
+        for planes in _PROJECTIONS
+    )
+
+
+def extent_error(occupied, source_bounds):
+    # A whole-height 1/16 board can be smaller in volume than a compact panel.
+    # First avoid extending its silhouette into empty space beside a small trim.
+    return max(
+        max(0, source_low - low, high - source_high)
+        for (low, high), (source_low, source_high) in zip(projected_bounds(occupied), source_bounds)
+    )
+
 
 def byte_candidate(mask):
     selected = tuple(bool(mask & octant) for octant in OCTANT_MASKS)
@@ -176,6 +204,8 @@ def fit_detail(mask):
     if mask == FULL_MASK:
         return None
 
+    source_bounds = projected_bounds(mask)
+
     def error(item):
         target, occupied_bits = item
         difference = ((mask ^ occupied_bits) & VOLUME_MASK).bit_count()
@@ -187,7 +217,7 @@ def fit_detail(mask):
                 "copycats:copycat_byte": 4,
                 "create:copycat_panel": 1,
             }.get(target.name, 0)
-        return difference
+        return extent_error(occupied_bits, source_bounds), difference
 
     # The full-block candidate has zero missing samples, so a non-covering
     # candidate can never win. Nested half layers need only their least covering

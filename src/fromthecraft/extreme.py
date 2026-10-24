@@ -13,6 +13,8 @@ from .detail import (
     VOLUME_MASK,
     bits,
     detail_choices,
+    extent_error,
+    projected_bounds,
     state,
 )
 
@@ -58,9 +60,13 @@ def fit_extreme(mask):
     # Smooth surfaces win exact geometric ties. The full-block fallback means
     # every sampled solid point can always be retained, including hull probes.
     choices = (*extra_candidates(), *detail_choices(mask, covering_only=True))
+    source_bounds = projected_bounds(mask)
     return min(
         (item for item in choices if not mask & ~item[1]),
-        key=lambda item: ((mask ^ item[1]) & VOLUME_MASK).bit_count(),
+        key=lambda item: (
+            extent_error(item[1], source_bounds),
+            ((mask ^ item[1]) & VOLUME_MASK).bit_count(),
+        ),
     )[0]
 
 
@@ -212,12 +218,12 @@ def paint_target(part, preference, mods, base):
         for material, source_mask in materials.items():
             shared = source_mask & mask
             if shared:
-                # Give a concentrated small accent a chance to occupy a target
-                # piece instead of always losing to the surrounding hull color.
+                # Paint each available piece with its locally dominant source.
+                # Normalizing by a source's total footprint lets a single tiny
+                # mark repaint a whole byte, turning fine lines into patches.
                 count = shared.bit_count() + 8 * (shared & boundary).bit_count()
-                total = source_mask.bit_count() + 8 * (source_mask & boundary).bit_count()
-                choices.append((count / total, count, material))
-        return max(choices, key=lambda item: item[:2])[2] if choices else base
+                choices.append((count, material))
+        return max(choices, key=lambda item: item[0])[1] if choices else base
 
     partitions = []
     for candidate in material_partitions(target):
@@ -227,7 +233,7 @@ def paint_target(part, preference, mods, base):
             + 8 * (materials.get(material, 0) & mask & boundary).bit_count()
             for (slot, mask), (_, material) in zip(slot_masks(candidate), painted)
         )
-        partitions.append((candidate, painted, (len({material for _, material in painted}), agreement)))
+        partitions.append((candidate, painted, agreement))
     if partitions:
         target, painted, _ = max(partitions, key=lambda item: item[2])
         if len({material for _, material in painted}) > 1:

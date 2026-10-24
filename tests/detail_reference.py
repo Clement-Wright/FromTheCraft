@@ -117,7 +117,19 @@ def half_layer_options():
 
 
 @lru_cache(maxsize=8192)
-def fit_detail(mask):
+def _bounds(mask):
+    selected = DETAIL_SAMPLES[[bool(mask & (1 << i)) for i in range(len(DETAIL_SAMPLES))]]
+    return (selected.min(0), selected.max(0)) if len(selected) else (np.zeros(3), np.zeros(3))
+
+
+def silhouette_error(mask, candidate):
+    low, high = _bounds(mask)
+    other_low, other_high = _bounds(candidate)
+    return max(0, float(np.max(low - other_low)), float(np.max(other_high - high)))
+
+
+@lru_cache(maxsize=8192)
+def fit_detail(mask, compact=False):
     full = (1 << len(DETAIL_SAMPLES)) - 1
     if mask == full:
         return None
@@ -166,6 +178,9 @@ def fit_detail(mask):
         # Retain the sampled solid, including near-face probes, before reducing
         # excess volume. Projections alone allow open boards to replace a solid
         # corner and leave gaps when viewed from an oblique angle.
-        return ((mask & ~occupied_bits).bit_count(), difference)
+        missing = (mask & ~occupied_bits).bit_count()
+        if compact:
+            return missing, silhouette_error(mask, occupied_bits), difference
+        return missing, difference
 
     return min(choices, key=error)[0]
