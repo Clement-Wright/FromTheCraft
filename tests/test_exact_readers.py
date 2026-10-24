@@ -166,6 +166,21 @@ def test_malformed_litematic_keeps_legacy_validation(mutation):
     assert str(actual.value) == str(reference.value)
 
 
+@pytest.mark.parametrize("earlier_invalid_state", [False, True])
+def test_corrupt_packed_index_preserves_first_error_in_source_order(earlier_invalid_state):
+    region = Region(0, 0, 0, 2, 1, 1)
+    region[0, 0, 0] = BlockState("minecraft:stone", **({"bad": "value"} if earlier_invalid_state else {}))
+    root = Schematic(regions={"one": region}, mc_version=3955).to_nbt()
+    # Two bits per entry: the first state is 1, the later corrupt state is 3.
+    root["Regions"]["one"]["BlockStates"] = nbt.LongArray([13])
+    content = encoded(root)
+    with pytest.raises(ValueError) as reference:
+        before.read_litematic(content)
+    with pytest.raises(type(reference.value)) as actual:
+        module.read_litematic(content)
+    assert str(actual.value) == str(reference.value)
+
+
 @pytest.mark.parametrize(
     "writer,reference",
     [(module.write_structure, before.write_structure), (module.write_litematic, before.write_litematic)],

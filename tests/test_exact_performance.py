@@ -160,6 +160,21 @@ def test_acceleration_cache_reuses_only_exact_geometry_with_independent_state():
     assert tiny.get(vertices, indices, 0.125, None, False).tree is not a.tree
 
 
+def test_malformed_definition_guid_is_skipped_without_losing_valid_definitions(tmp_path):
+    import json
+    from fromthecraft.ftd_meshes import _definitions
+
+    folder = tmp_path / "Mods" / "Core_Test" / "Items"
+    folder.mkdir(parents=True)
+    for index, guid in enumerate(([], {}, "valid")):
+        (folder / f"{index}.item").write_text(json.dumps({"ComponentId": {"Guid": guid}}))
+    _definitions.cache_clear()
+    try:
+        assert list(_definitions(str(tmp_path))) == ["valid"]
+    finally:
+        _definitions.cache_clear()
+
+
 def test_repeated_material_classification_reuses_exact_immutable_inputs(monkeypatch):
     from dataclasses import replace
     from fromthecraft.palettes import mc_target_material

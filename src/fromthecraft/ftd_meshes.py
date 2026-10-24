@@ -127,7 +127,11 @@ def _definitions(root):
                 # map yields in input order, including duplicate GUID overrides.
                 for result in workers.map(read, files[start : start + 256]):
                     if result is not None:
-                        definitions[result[0]] = result[1]
+                        try:
+                            definitions[result[0]] = result[1]
+                        except TypeError:
+                            # The serial reader also skipped unhashable GUIDs.
+                            pass
     return definitions
 
 

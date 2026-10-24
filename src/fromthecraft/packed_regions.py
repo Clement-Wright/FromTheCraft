@@ -46,14 +46,18 @@ class PackedRegion:
             split = shift + self.nbits > 64
             values[split] |= self.words[word[split] + 1] << (64 - shift[split])
             values &= mask
-            if np.any(values >= len(self.palette)):
-                raise IndexError("list index out of range")
-            selected = np.flatnonzero(~air[values])
+            invalid = values >= len(self.palette)
+            valid_count = int(np.argmax(invalid)) if np.any(invalid) else len(values)
+            selected = np.flatnonzero(~air[values[:valid_count]])
             for index in selected:
                 yield (
                     (int(x[index]) + minimum[0], int(y[index]) + minimum[1], int(z[index]) + minimum[2]),
                     self.palette[int(values[index])],
                 )
+            if valid_count < len(values):
+                # Earlier states must be accepted/validated before this error,
+                # exactly as in the original source-order Region iterator.
+                raise IndexError("list index out of range")
 
 
 def regions(root):
