@@ -277,7 +277,7 @@ def redo_source(request: Request):
 class Options(BaseModel):
     model_config = {"extra": "forbid"}
     format: Literal["nbt", "litematic", "blueprint"]
-    scale: Literal[0.25, 0.5, 1, 2, 4] = 1
+    scale: Literal[0.25, 0.5, 1, 2, 3, 4, 5] = 1
     preference: Literal["balanced", "material", "color"] = "balanced"
     detailed_copycats: bool = False
     extreme_detail: bool = False

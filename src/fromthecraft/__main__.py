@@ -22,7 +22,7 @@ def main():
     conversion = commands.add_parser("convert", help="Convert a structure without opening the interface")
     conversion.add_argument("source", type=Path)
     conversion.add_argument("destination", type=Path)
-    conversion.add_argument("--scale", type=float, choices=[4, 2, 1, 0.5, 0.25], default=1)
+    conversion.add_argument("--scale", type=float, choices=[5, 4, 3, 2, 1, 0.5, 0.25], default=1)
     conversion.add_argument("--palette", choices=["balanced", "material", "color"], default="balanced")
     conversion.add_argument(
         "--hollow", action="store_true", help="Keep an exterior shell and remove enclosed parts"

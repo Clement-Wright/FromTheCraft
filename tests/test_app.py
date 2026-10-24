@@ -36,6 +36,20 @@ def finished(client):
     pytest.fail("Conversion did not finish")
 
 
+@pytest.mark.parametrize("scale", [3, 5])
+def test_new_upscale_choices_roundtrip_conversion_projects_and_presets(client, scale):
+    upload(client)
+    settings = {"format": "nbt", "scale": scale}
+    assert client.post("/api/convert", json=settings).status_code == 200
+    assert finished(client)["state"] == "ready"
+    saved = client.post("/api/project/save", json={"settings": settings})
+    assert saved.status_code == 200
+    assert client.post("/api/project/open", json=saved.json()).json()["settings"]["scale"] == scale
+    preset = client.post("/api/preset/save", json={"settings": settings})
+    assert preset.status_code == 200
+    assert client.post("/api/preset/open", json=preset.json()).json()["settings"]["scale"] == scale
+
+
 def test_extreme_detail_api_and_project_settings_roundtrip(client):
     upload(client)
     settings = {

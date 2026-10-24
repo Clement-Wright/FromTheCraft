@@ -644,7 +644,7 @@ export default function App() {
                 invalidate();
               }}
             >
-              {[4, 2, 1, 0.5, 0.25].map((n) => (
+              {[5, 4, 3, 2, 1, 0.5, 0.25].map((n) => (
                 <option value={n} key={n}>
                   {n}×{n === 1 ? " (default)" : ""}
                 </option>

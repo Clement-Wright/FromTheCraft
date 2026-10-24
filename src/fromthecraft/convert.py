@@ -34,8 +34,8 @@ def convert(
     from .mesh_geometry import prepare_meshes
 
     mods = selected_mods(mods)
-    if scale not in (0.25, 0.5, 1, 2, 4):
-        raise ValueError("Scale must be 0.25, 0.5, 1, 2, or 4")
+    if scale not in (0.25, 0.5, 1, 2, 3, 4, 5):
+        raise ValueError("Scale must be 0.25, 0.5, 1, 2, 3, 4, or 5")
     if preference not in {"balanced", "material", "color"}:
         raise ValueError("Unknown material preference")
     if shell_thickness not in (1, 2, 3, 4):

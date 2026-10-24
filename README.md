@@ -24,7 +24,7 @@ Click **Convert**, inspect both views, then click **Export file**. Hover over ei
 
 The **Build materials** list counts source parts or exported blocks. A 4 m source beam counts as one part. The converted list counts the actual serialized blocks, grouping their facing and other placement states under the same block name. Search the list or collapse it to give the previews more space. Linked cameras help you check the same area in both views. Changing the source or conversion options clears the previous export until you convert again.
 
-All five scales work in both directions: 4×, 2×, 1×, 0.5× and 0.25×. At 1×, one Minecraft block equals one FtD meter. Smaller scales merge occupied cells and can remove small openings or thin details. Estimated dimensions appear before conversion. Large 4× results may exceed the limits below.
+All seven scales work in both directions: 5×, 4×, 3×, 2×, 1×, 0.5× and 0.25×. At 1×, one Minecraft block equals one FtD meter. Smaller scales merge occupied cells and can remove small openings or thin details. Estimated dimensions appear before conversion. Large upscaled results may exceed the limits below.
 
 **Hollow interior** is optional and off by default. Set a shell thickness of 1 to 4 output cells to keep a shell along surfaces that face outside air. Air reaches inward through openings, so the shell can follow open passages. Enclosed interior decks and parts may disappear when you enable hollowing.
 
