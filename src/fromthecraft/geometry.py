@@ -168,6 +168,21 @@ def cell_candidates(low, high):
     return result
 
 
+def candidate_batches(low, high, batch_size):
+    """The original product order and batch boundaries, with bounded storage."""
+    size = high - low
+    if np.any(size <= 0):
+        return
+    total = int(np.prod(size))
+    for start in range(0, total, batch_size):
+        indices = np.arange(start, min(total, start + batch_size), dtype=int)
+        result = np.empty((len(indices), 3), dtype=int)
+        result[:, 0] = indices // (size[1] * size[2]) + low[0]
+        result[:, 1] = indices // size[2] % size[1] + low[1]
+        result[:, 2] = indices % size[2] + low[2]
+        yield result
+
+
 def merge_seed_masks(seed_masks, keys, octants, occupancy):
     """Combine duplicates with integer operations while retaining insertion order."""
     if len(keys) > 32:
@@ -232,8 +247,7 @@ def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers):
         pmin, pmax = np.floor(world.min(0) + 1e-7).astype(int), np.ceil(world.max(0) - 1e-7).astype(int)
         if int(np.prod(pmax - pmin)) > MAX_PARTS:
             raise ValueError("One part's sampled footprint is too large; choose a smaller scale")
-        candidates = cell_candidates(pmin, pmax)
-        if len(candidates) == 0:
+        if np.any(pmax <= pmin):
             continue
         # Boxes on integer grid boundaries need no occupancy samples.
         aligned = np.allclose(part.transform[:3, :3], np.round(part.transform[:3, :3]))
@@ -248,10 +262,10 @@ def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers):
             mesh_sampler.executor = workers
         # Keep the denser detail grid within the former sampling memory budget.
         batch_size = max(1, 1_572_864 // sample_count)
-        for start in range(0, len(candidates), batch_size):
+        full_group = {appearance: (part, full_mask)} if extreme else None
+        for batch in candidate_batches(pmin, pmax, batch_size):
             if cancelled and cancelled():
                 raise Cancelled("Conversion cancelled")
-            batch = candidates[start : start + batch_size]
             masks = None
             if not solid_box:
                 # Union with an already full cell cannot change either its
@@ -280,12 +294,21 @@ def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers):
                 bits = full_mask if packed is None else int.from_bytes(packed[row], "little")
                 if bits:
                     key = tuple(position - origin)
-                    occupancy[key] = occupancy.get(key, 0) | bits
+                    previous = occupancy.get(key, 0)
+                    occupancy[key] = (
+                        full_mask if bits == full_mask or previous == full_mask else previous | bits
+                    )
                     cells.setdefault(key, part)
                     if extreme:
                         sampled.add(key)
-                        group = contributions.setdefault(key, {})
-                        record_contribution(group, part, appearance, bits)
+                        if key not in contributions and bits == full_mask:
+                            contributions[key] = full_group
+                        else:
+                            # A shared full-wall group is immutable. Copy before
+                            # applying a later cell-local contributor or overlay.
+                            group = contributions.get(key, {}).copy()
+                            contributions[key] = group
+                            record_contribution(group, part, appearance, bits)
         # Forward sampling protects small features that fall between target sample centers.
         if not aligned or min(part.size) * scale < 0.5 or part.shape != "box":
             axes = [
@@ -324,7 +347,8 @@ def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers):
                 if extreme:
                     occupancy[position] = occupancy.get(position, 0) | mask
                     cells.setdefault(position, part)
-                    group = contributions.setdefault(position, {})
+                    group = contributions.get(position, {}).copy()
+                    contributions[position] = group
                     record_contribution(group, part, appearance, mask)
                     continue
                 previous, owner = fallback.get(position, (0, part))

@@ -408,7 +408,7 @@ def read_litematic(content):
 
 def write_litematic(cells, size):
     checked_size(size)
-    from .litematic_output import OutputRegion
+    from .litematic_output import OutputRegion, SparseOutputRegion
 
     ordinary = all(
         len(pos) == 3
@@ -418,7 +418,8 @@ def write_litematic(cells, size):
         )
         for pos in cells
     )
-    region = (OutputRegion if ordinary else Region)(0, 0, 0, *[int(n) for n in size])
+    region_type = SparseOutputRegion if len(cells) * 32 < int(np.prod(size)) else OutputRegion
+    region = (region_type if ordinary else Region)(0, 0, 0, *[int(n) for n in size])
     entity_at = _entity_factory()
     states = lru_cache(maxsize=4096)(lambda name, properties: BlockState(name, **dict(properties)))
     for pos, state in cells.items():

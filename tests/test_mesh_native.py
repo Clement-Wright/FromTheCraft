@@ -10,12 +10,13 @@ def test_native_attempt_stops_when_full_numpy_fallback_is_inevitable():
     from fromthecraft.mesh_geometry import MeshSampler
 
     vertices = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
-    sampler = MeshSampler(vertices, np.array([[0, 1, 2]]), closed=False)
-    points = np.zeros((5000, 3))
+    vertices = np.concatenate((vertices, vertices + (0, 0, 1)))
+    sampler = MeshSampler(vertices, np.array([[0, 1, 2], [3, 4, 5]]), closed=False)
+    points = np.tile([0.25, 0.25, np.sqrt(0.0625**2 + 1e-12)], (5000, 1))
     result, work, uncertain = _mesh_native.contains(points, *sampler._native_arrays(), False, 0.0625)
     assert uncertain
     assert len(result) == len(points)
-    assert work <= 1, "Discard the native attempt as soon as original NumPy fallback is required"
+    assert work <= 2, "Discard the native attempt as soon as original NumPy fallback is required"
 
 
 def test_voxelize_cancellation_does_not_wait_for_running_native_chunks(monkeypatch):
@@ -91,6 +92,21 @@ def test_parallel_native_queries_keep_original_bits_and_budget(monkeypatch, clos
     np.testing.assert_array_equal(actual, expected)
     assert parallel.work == serial.work
     assert len(thread_ids) > 1, "Use multiple native workers for a dense mesh query"
+
+
+def test_robust_hits_on_open_triangle_seams_do_not_require_a_numpy_fallback():
+    from fromthecraft.mesh_geometry import MeshSampler
+    from mesh_reference import ReferenceMeshSampler
+
+    vertices = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]])
+    indices = np.array([[0, 1, 2], [0, 2, 3]])
+    sampler = MeshSampler(vertices, indices, closed=False)
+    points = np.array([[t, t, 0.0] for t in np.linspace(0.01, 0.99, 100)])
+    actual, work, uncertain = _mesh_native.contains(points, *sampler._native_arrays(), False, sampler.radius)
+    assert not uncertain, "A robust edge-distance hit cannot depend on which side of a triangle seam wins"
+    expected_sampler = ReferenceMeshSampler(vertices, indices, closed=False)
+    np.testing.assert_array_equal(np.frombuffer(actual, dtype=np.uint8), expected_sampler.contains(points))
+    assert work == expected_sampler.work
 
 
 def test_native_kernel_rejects_invalid_buffers_instead_of_reading_past_them():
@@ -174,12 +190,49 @@ def test_non_contiguous_and_wrong_endian_arrays_are_rejected():
 
 def test_triangle_footprint_boundary_is_checked_with_original_vector_arithmetic():
     from fromthecraft.mesh_geometry import MeshSampler
+    from mesh_reference import ReferenceMeshSampler
 
     vertices = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
     sampler = MeshSampler(vertices, np.array([[0, 1, 2]]), closed=False)
     points = np.array([[0.0, 0.25, 0.01], [0.5, 0.5, 0.01]])
-    _, _, uncertain = _mesh_native.contains(points, *sampler._native_arrays(), False, 0.0625)
-    assert uncertain
+    actual, work, uncertain = _mesh_native.contains(points, *sampler._native_arrays(), False, 0.0625)
+    reference = ReferenceMeshSampler(vertices, np.array([[0, 1, 2]]), closed=False)
+    np.testing.assert_array_equal(np.frombuffer(actual, dtype=np.uint8), reference.contains(points))
+    assert work == reference.work
+    assert not uncertain, "Robust edge hits agree on either side of the projection branch"
+
+
+def test_open_mesh_queries_classify_the_whole_tree_once_when_unambiguous(monkeypatch):
+    from fromthecraft.mesh_geometry import MeshSampler
+    from mesh_reference import ReferenceMeshSampler
+
+    vertices = np.array([[x, y, 0.0] for x in range(9) for y in range(9)], dtype=float)
+    indices = np.array(
+        [
+            triangle
+            for x in range(8)
+            for y in range(8)
+            for triangle in (
+                (x * 9 + y, (x + 1) * 9 + y, (x + 1) * 9 + y + 1),
+                (x * 9 + y, (x + 1) * 9 + y + 1, x * 9 + y + 1),
+            )
+        ]
+    )
+    points = np.column_stack((np.random.default_rng(921).uniform(0.01, 7.99, (2000, 2)), np.zeros(2000)))
+    calls, original = 0, _mesh_native.contains
+
+    def count(*args):
+        nonlocal calls
+        calls += 1
+        return original(*args)
+
+    monkeypatch.setattr(_mesh_native, "contains", count)
+    sampler = MeshSampler(vertices, indices, closed=False)
+    actual = sampler.contains(points)
+    reference = ReferenceMeshSampler(vertices, indices, closed=False)
+    np.testing.assert_array_equal(actual, reference.contains(points))
+    assert sampler.work == reference.work
+    assert calls == 1
 
 
 def test_proven_open_surface_hit_can_skip_irrelevant_ill_conditioned_triangles():

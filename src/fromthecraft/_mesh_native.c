@@ -27,11 +27,10 @@ static double surface_distance(const double *p, const double *t, double cutoff, 
     double u = (cc * pab - bb * pac) / denominator;
     double v = (aa * pac - bb * pab) / denominator;
     double branch_margin = 64 * DBL_EPSILON * (aa * cc + bb * bb) / denominator * (1 + fabs(u) + fabs(v));
-    if (!isfinite(u) || !isfinite(v) || !isfinite(branch_margin) ||
-        fabs(u) <= branch_margin || fabs(v) <= branch_margin || fabs(u + v - 1) <= branch_margin) {
-        *uncertain = 1;
-    }
+    int branch_uncertain = !isfinite(u) || !isfinite(v) || !isfinite(branch_margin) ||
+        fabs(u) <= branch_margin || fabs(v) <= branch_margin || fabs(u + v - 1) <= branch_margin;
     double distance = (u >= 0 && v >= 0 && u + v <= 1) ? plane_distance : INFINITY;
+    double edge_distance = INFINITY;
     for (int edge = 0; edge < 3; edge++) {
         const double *start = t + 17 + edge * 7, *direction = start + 3;
         double length = start[6];
@@ -43,7 +42,13 @@ static double surface_distance(const double *p, const double *t, double cutoff, 
         if (fraction > 1) fraction = 1;
         for (int k = 0; k < 3; k++) d[k] = delta[k] - fraction * direction[k];
         double candidate = (d[0] * d[0] + d[1] * d[1]) + d[2] * d[2];
+        if (candidate < edge_distance) edge_distance = candidate;
         if (candidate < distance) distance = candidate;
+    }
+    /* An edge-distance hit remains a hit on either side of a barycentric
+     * seam. Keep the original fallback whenever that proof is not robust. */
+    if (branch_uncertain && !(isfinite(edge_distance) && edge_distance < cutoff - margin)) {
+        *uncertain = 1;
     }
     return distance;
 }

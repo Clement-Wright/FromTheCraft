@@ -278,7 +278,7 @@ class MeshSampler:
             points[:, 1:] += (1e-10, 3.14159e-10)
         result = np.zeros(len(points), dtype=np.int32)
 
-        def visit(node, candidates):
+        def visit(node, candidates, native=True):
             if self.cancelled and self.cancelled():
                 raise Cancelled("Conversion cancelled")
             low, high, left, right = node
@@ -293,8 +293,8 @@ class MeshSampler:
             if not len(candidates):
                 return
             if right is not None:
-                visit(left, candidates)
-                visit(right, candidates)
+                visit(left, candidates, native)
+                visit(right, candidates, native)
                 return
             self.work += len(candidates) * len(left)
             if self.work > MAX_MESH_SAMPLE_WORK:
@@ -302,7 +302,7 @@ class MeshSampler:
                     "Decorative mesh sampling budget exceeded; choose a smaller scale or structure-only mode"
                 )
             p = points[candidates]
-            if not self.closed and _mesh_native is not None and points.dtype == np.float64:
+            if native and not self.closed and _mesh_native is not None and points.dtype == np.float64:
                 key = id(left)
                 if key not in self.native_leaves:
                     self.native_leaves[key] = (
@@ -349,12 +349,7 @@ class MeshSampler:
         for start in range(0, len(points), 32768):
             if self.cancelled and self.cancelled():
                 raise Cancelled("Conversion cancelled")
-            if (
-                self.closed
-                and _mesh_native is not None
-                and points.dtype == np.float64
-                and points.flags.c_contiguous
-            ):
+            if _mesh_native is not None and points.dtype == np.float64 and points.flags.c_contiguous:
                 occupied, work, uncertain = self._native_query(
                     points[start : start + 32768], self._native_arrays(), self.closed
                 )
@@ -368,7 +363,9 @@ class MeshSampler:
                     continue
                 # Preserve original BLAS rounding for the complete original
                 # batch, rather than recalculating a differently sized subset.
-            visit(self.tree, np.arange(start, min(len(points), start + 32768)))
+            # A one-leaf whole-tree attempt already established uncertainty;
+            # do not repeat that identical native call before NumPy fallback.
+            visit(self.tree, np.arange(start, min(len(points), start + 32768)), self.tree[3] is not None)
         return (result % 2 != 0) if self.closed else (result != 0)
 
 

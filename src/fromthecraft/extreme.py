@@ -110,7 +110,19 @@ def exposed_samples(mask, neighbors):
 def merge_fine_seeds(seed_masks, positions, fractions, sampled):
     """Keep unsampled features at 1/16 resolution, including their paint owner."""
     indices = np.clip((fractions * 16).astype(int), 0, 15) @ [256, 16, 1]
-    unique = np.unique(np.column_stack((positions, indices)), axis=0)
+    positions = np.asarray(positions)
+    if positions.dtype.kind == "i" and not np.any((positions < 0) | (positions >= 4096)):
+        # Four bounded integer coordinates form one lexicographically ordered
+        # 48-bit key. Scalar sorting avoids structured-row comparisons; unpack
+        # back to the same integer rows and keep the original iteration order.
+        p = positions.astype(np.uint64)
+        packed = (p[:, 0] << 36) | (p[:, 1] << 24) | (p[:, 2] << 12) | indices.astype(np.uint64)
+        keys = np.unique(packed)
+        unique = np.empty((len(keys), 4), dtype=np.result_type(positions.dtype, indices.dtype))
+        for axis, shift in enumerate((36, 24, 12, 0)):
+            unique[:, axis] = (keys >> shift) & 4095
+    else:
+        unique = np.unique(np.column_stack((positions, indices)), axis=0)
     for x, y, z, index in unique:
         key = (x, y, z)
         if key not in sampled:
