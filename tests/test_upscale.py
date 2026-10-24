@@ -58,7 +58,7 @@ def test_bounded_local_sample_transform_preserves_every_float_bit(scale, span):
 
 
 @pytest.mark.parametrize("exterior", [False, True])
-def test_sealed_interior_decorations_do_not_repeat_invisible_sampling(monkeypatch, exterior):
+def test_interior_decorations_keep_original_sampling_batches(monkeypatch, exterior):
     from dataclasses import replace
     import fromthecraft.geometry as geometry
 
@@ -84,7 +84,42 @@ def test_sealed_interior_decorations_do_not_repeat_invisible_sampling(monkeypatc
         assert any(part.color[1] > part.color[0] + 0.1 for part in result.scene.parts)
     else:
         assert result.content == reference.content
-        assert not calls, "An already sealed full cell cannot reveal buried decoration paint"
+        assert calls, "Keep the original NumPy batch shapes even for invisible paint"
+
+
+def test_mixed_exterior_and_interior_decorations_keep_the_complete_numeric_batch(monkeypatch):
+    from dataclasses import replace
+    import fromthecraft.geometry as geometry
+    from fromthecraft.detail import DETAIL_SAMPLES
+
+    host = Part("hull", "box", (3, 3, 3), np.eye(4), "Stone", (0.95,) * 3)
+    transform = np.eye(4)
+    transform[:3, 3] = (0, 1.5, 1.5)
+    accent = replace(
+        host,
+        identity="stripe",
+        size=(3, 0.5, 0.5),
+        transform=transform,
+        color=(0.1, 0.8, 0.8),
+        decoration=True,
+    )
+    batches, contains = [], geometry.contains
+
+    def sampled(shape, points):
+        batches.append(len(points))
+        return contains(shape, points)
+
+    monkeypatch.setattr(geometry, "contains", sampled)
+    convert(
+        Scene([host, accent], "blueprint"),
+        "nbt",
+        mods=("copycats",),
+        extreme_detail=True,
+        decoration_mode="decorations",
+    )
+    assert batches == [3 * len(DETAIL_SAMPLES)], (
+        "Dropping the middle cell can change BLAS rounding for its visible neighbors"
+    )
 
 
 @pytest.mark.parametrize("scale", [3, 5])

@@ -241,25 +241,6 @@ def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers, nat
     cells, occupancy, fallback = {}, {}, {}
     contributions = {}
 
-    def sealed(position):
-        # Occupancy only grows during this stage. A full cell with six full
-        # neighbors has no exposed samples, so buried decoration cannot change
-        # its geometry or paint even when later parts are added.
-        if occupancy.get(position, 0) != full_mask:
-            return False
-        x, y, z = position
-        return all(
-            occupancy.get(neighbor, 0) == full_mask
-            for neighbor in (
-                (x - 1, y, z),
-                (x + 1, y, z),
-                (x, y - 1, z),
-                (x, y + 1, z),
-                (x, y, z - 1),
-                (x, y, z + 1),
-            )
-        )
-
     from .mesh_geometry import MeshSamplerCache
 
     samplers = MeshSamplerCache()
@@ -316,7 +297,6 @@ def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers, nat
                             else occupancy.get(key, 0)
                         )
                         != full_mask
-                        and not (extreme and part.decoration and sealed(key))
                         for key in keys
                     ]
                     batch = batch[keep]
@@ -376,13 +356,7 @@ def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers, nat
                 if extreme:
                     from .extreme import merge_fine_seeds
 
-                    merge_fine_seeds(
-                        seed_masks,
-                        positions - origin,
-                        world_seeds - positions,
-                        sampled,
-                        sealed if part.decoration else None,
-                    )
+                    merge_fine_seeds(seed_masks, positions - origin, world_seeds - positions, sampled)
                 else:
                     octants = (world_seeds - positions >= 0.5).astype(int) @ [4, 2, 1]
                     merge_seed_masks(seed_masks, positions - origin, octants, occupancy)

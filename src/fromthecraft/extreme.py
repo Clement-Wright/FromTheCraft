@@ -113,7 +113,7 @@ def exposed_samples(mask, neighbors):
     return (volume & ~interior) | probes
 
 
-def merge_fine_seeds(seed_masks, positions, fractions, sampled, sealed=None):
+def merge_fine_seeds(seed_masks, positions, fractions, sampled):
     """Keep unsampled features at 1/16 resolution, including their paint owner."""
     indices = np.clip((fractions * 16).astype(int), 0, 15) @ [256, 16, 1]
     positions = np.asarray(positions)
@@ -131,7 +131,7 @@ def merge_fine_seeds(seed_masks, positions, fractions, sampled, sealed=None):
         unique = np.unique(np.column_stack((positions, indices)), axis=0)
     for x, y, z, index in unique.tolist():
         key = (x, y, z)
-        if key not in sampled and not (sealed and sealed(key)):
+        if key not in sampled:
             seed_masks[key] = seed_masks.get(key, 0) | (1 << int(index))
 
 
