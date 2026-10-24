@@ -3,6 +3,7 @@
 import json
 from functools import lru_cache
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
@@ -104,20 +105,29 @@ def decode_mesh_cache(data):
 @lru_cache(maxsize=2)
 def _definitions(root):
     definitions = {}
-    for pattern in (
-        "Core_*/Items/*.item",
-        "Core_*/ItemDup/*.itemduplicateandmodify",
-        "Core_*/Objects/*.object",
-        "Core_*/Meshes/*.mesh",
-    ):
-        for file in sorted((Path(root) / "Mods").glob(pattern))[:20_000]:
-            try:
-                if file.stat().st_size > 1024**2:
-                    continue
+
+    def read(file):
+        try:
+            if file.stat().st_size <= 1024**2:
                 item = json.loads(file.read_bytes())
-                definitions[item["ComponentId"]["Guid"]] = (item, file.parent.parent / "Assets")
-            except (OSError, ValueError, KeyError, TypeError):
-                continue
+                return item["ComponentId"]["Guid"], (item, file.parent.parent / "Assets")
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+        return None
+
+    with ThreadPoolExecutor(max_workers=8, thread_name_prefix="ftd-definitions") as workers:
+        for pattern in (
+            "Core_*/Items/*.item",
+            "Core_*/ItemDup/*.itemduplicateandmodify",
+            "Core_*/Objects/*.object",
+            "Core_*/Meshes/*.mesh",
+        ):
+            files = sorted((Path(root) / "Mods").glob(pattern))[:20_000]
+            for start in range(0, len(files), 256):
+                # map yields in input order, including duplicate GUID overrides.
+                for result in workers.map(read, files[start : start + 256]):
+                    if result is not None:
+                        definitions[result[0]] = result[1]
     return definitions
 
 

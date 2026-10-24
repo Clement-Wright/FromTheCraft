@@ -4,6 +4,7 @@ import re
 from dataclasses import replace
 from collections import Counter
 from pathlib import Path
+from functools import lru_cache
 
 import numpy as np
 
@@ -116,6 +117,7 @@ def read_blueprint(content: bytes) -> Scene:
         if records > MAX_PARTS:
             raise ValueError(f"Blueprint exceeds {MAX_PARTS:,} blocks")
         hosts, mimics = {}, {}
+        needs_hosts = bool(construct.get("VehicleData"))
         for index, (position, rot, block_id, paint) in enumerate(
             zip(construct["BLP"], construct["BLR"], construct["BlockIds"], construct["BCI"])
         ):
@@ -131,8 +133,10 @@ def read_blueprint(content: bytes) -> Scene:
                 name=entry["Name"] if entry else guid,
             )
             source_records.append(record)
-            anchor = tuple(vector(position))
-            hosts.setdefault(anchor, record.id)
+            position_vector = vector(position)
+            anchor = tuple(position_vector)
+            if needs_hosts:
+                hosts.setdefault(anchor, record.id)
             if entry is None:
                 notices[f"Unrecognized FtD ID {guid}: omitted"] += 1
                 continue
@@ -144,7 +148,7 @@ def read_blueprint(content: bytes) -> Scene:
             if extent is None:
                 extent = FOOTPRINTS[str(entry["SizeId"])]
             size = tuple(extent[a + "n"] + extent[a + "p"] + 1 for a in "xyz")
-            if np.prod(size) <= 512:
+            if needs_hosts and np.prod(size) <= 512:
                 from itertools import product
 
                 for delta in product(*[range(-extent[a + "n"], extent[a + "p"] + 1) for a in "xyz"]):
@@ -161,7 +165,7 @@ def read_blueprint(content: bytes) -> Scene:
                 color = color * (1 - rgba[3]) + rgba[:3] * rgba[3]
             local = np.eye(4)
             local[:3, :3] = rotation(rot)
-            local[:3, 3] = vector(position) + local[:3, :3] @ (
+            local[:3, 3] = position_vector + local[:3, :3] @ (
                 -np.array([extent[a + "n"] for a in "xyz"]) - 0.5
             )
             world = transform @ local
@@ -308,6 +312,13 @@ def read_blueprint(content: bytes) -> Scene:
 
 def write_blueprint(cells, name="FromTheCraft"):
     paints = [(0.0, 0.0, 0.0, 0.0)]
+
+    @lru_cache(maxsize=4096)
+    def nearest_paint(color, palette_version):
+        # The palette grows while records are written. Raw (unrounded) color
+        # and its current length both matter to the original nearest search.
+        return min(range(1, palette_version), key=lambda i: np.linalg.norm(np.array(paints[i][:3]) - color))
+
     positions, rotations, paint_indices, block_ids = [], [], [], []
     dictionary = {"499": "e63040c9-0027-4fd3-be30-67fe3e950140"}
     ids = {}
@@ -327,7 +338,7 @@ def write_blueprint(cells, name="FromTheCraft"):
         paint = tuple(round(float(v), 6) for v in part.color) + (1.0,)
         if paint not in paints and len(paints) < 32:
             paints.append(paint)
-        index = min(range(1, len(paints)), key=lambda i: np.linalg.norm(np.array(paints[i][:3]) - part.color))
+        index = nearest_paint(tuple(part.color), len(paints))
         positions.append(",".join(str(int(n)) for n in position))
         rotations.append(rot)
         paint_indices.append(index)

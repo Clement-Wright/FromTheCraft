@@ -34,12 +34,15 @@ UP = (
     + [(1, 0, 0), (1, 0, 0), (-1, 0, 0), (-1, 0, 0), (0, 0, 1), (0, 0, 1), (0, 0, -1), (0, 0, -1)]
 )
 
+_ROTATIONS = tuple(
+    np.column_stack((np.cross(up, forward), up, forward)).astype(float) for forward, up in zip(FORWARD, UP)
+)
+
 
 def rotation(index: int) -> np.ndarray:
     if not 0 <= index < 24:
         raise ValueError(f"Invalid FtD block rotation: {index}")
-    f, u = np.array(FORWARD[index]), np.array(UP[index])
-    return np.column_stack((np.cross(u, f), u, f)).astype(float)
+    return _ROTATIONS[index].copy()
 
 
 def quaternion(values) -> np.ndarray:
