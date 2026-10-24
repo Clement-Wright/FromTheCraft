@@ -3,6 +3,7 @@ import hashlib
 import io
 import struct
 from collections import Counter
+from functools import lru_cache
 
 import nbtlib as nbt
 import numpy as np
@@ -29,14 +30,22 @@ def parse_nbt(content):
             raw = content
         if len(raw) > MAX_BYTES:
             raise ValueError("Decompressed NBT exceeds 128 MiB")
-        stream = io.BytesIO(raw)
+        position = 0
 
         def take(count):
-            if count < 0 or len(stream.read(count)) != count:
+            nonlocal position
+            if count < 0 or count > len(raw) - position:
                 raise ValueError("Truncated or invalid NBT length")
+            position += count
 
         def number(fmt):
-            return struct.unpack(fmt, stream.read(struct.calcsize(fmt)))[0]
+            nonlocal position
+            size = struct.calcsize(fmt)
+            if size > len(raw) - position:
+                raise struct.error(f"unpack requires a buffer of {size} bytes")
+            value = struct.unpack_from(fmt, raw, position)[0]
+            position += size
+            return value
 
         def string():
             take(number(">H"))
@@ -57,8 +66,13 @@ def parse_nbt(content):
                 item, count = number(">B"), number(">i")
                 if not 0 <= count <= MAX_LIST_ITEMS or (item == 0 and count):
                     raise ValueError("Invalid NBT list length")
-                for _ in range(count):
-                    payload(item, depth + 1)
+                if item in (1, 2, 3, 4, 5, 6):
+                    if count and depth + 1 > 64:
+                        raise ValueError("NBT nesting exceeds 64")
+                    take(count * {1: 1, 2: 2, 3: 4, 4: 8, 5: 4, 6: 8}[item])
+                else:
+                    for _ in range(count):
+                        payload(item, depth + 1)
             elif tag == 10:
                 while (item := number(">B")) != 0:
                     string()
@@ -70,7 +84,7 @@ def parse_nbt(content):
             raise ValueError("NBT root must be a compound")
         string()
         payload(10)
-        if stream.tell() != len(raw):
+        if position != len(raw):
             raise ValueError("Unexpected data after NBT root")
         return nbt.File.parse(io.BytesIO(raw))
     except (OSError, EOFError, struct.error, UnicodeDecodeError, OverflowError) as exc:
@@ -108,7 +122,7 @@ def write_structure(cells: dict, size) -> bytes:
 def read_structure(content: bytes):
     root = parse_nbt(content)
     notices = Counter()
-    cells, records = {}, {}
+    cells, records, templates = {}, {}, {}
     entries = []
     source_hash = hashlib.sha256(content).hexdigest()
     try:
@@ -124,7 +138,9 @@ def read_structure(content: bytes):
             if len(pos) != 3 or any(abs(n) > 100_000 for n in pos):
                 raise ValueError("Invalid structure block position")
             one = {}
-            accept(one, pos, BlockState.from_nbt(root["palette"][index]), notices, block.get("nbt"))
+            if index not in templates:
+                templates[index] = state_template(BlockState.from_nbt(root["palette"][index]))
+            accept(one, pos, None, notices, block.get("nbt"), template=templates[index])
             record_path = ("blocks", str(index_record))
             records.setdefault(
                 pos,
@@ -156,8 +172,9 @@ def check_version(version):
         )
 
 
-def accept(cells, position, block, notices, entity=None):
+def state_template(block):
     state = State(block.id, tuple(sorted((str(k), str(v)) for k, v in block.properties())))
+    message = None
     if state.name in MOD_STATES:
         rules = MOD_STATES[state.name]
         supported = tuple((key, value) for key, value in state.properties if value in rules.get(key, ()))
@@ -165,13 +182,20 @@ def accept(cells, position, block, notices, entity=None):
             omitted = ", ".join(
                 f"{key}={value}" for key, value in state.properties if (key, value) not in supported
             )
-            notices[
+            message = (
                 f"Approximated mod state {state.name}: unsupported source properties {omitted}; "
                 "using verified inert shape"
-            ] += 1
+            )
             state = State(state.name, supported)
     validate_state(state)
     policy, family = mc_policy(state.name)
+    return state, policy, family, message
+
+
+def accept(cells, position, block, notices, entity=None, *, template=None):
+    state, policy, family, message = template if template is not None else state_template(block)
+    if message:
+        notices[message] += 1
     if policy == "skipped":
         if family != "air":
             notices[f"Intentionally skipped {family}: {state.name}"] += 1
@@ -192,6 +216,12 @@ def accept(cells, position, block, notices, entity=None):
 
 def scene_from_cells(cells, format, notices, records=None, source_hash="", entries=None):
     parts = []
+
+    @lru_cache(maxsize=4096)
+    def shape_boxes(name, properties):
+        return geometry_boxes(State(name, properties))
+
+    material_color = lru_cache(maxsize=4096)(mc_material)
     source_entries = (
         entries
         if entries is not None
@@ -199,12 +229,12 @@ def scene_from_cells(cells, format, notices, records=None, source_hash="", entri
     )
     for position, state, record in source_entries:
         start = len(parts)
-        boxes = geometry_boxes(state)
+        boxes = shape_boxes(state.name, state.properties)
         if boxes is not None:
             appearances = dict(state.copied_materials)
             for slot, box in boxes:
                 visual = appearances.get(slot, state.copied_material or state)
-                material, color = mc_material(visual.name)
+                material, color = material_color(visual.name)
                 transform = np.eye(4)
                 transform[:3, 3] = np.asarray(position) + box[:3]
                 size = tuple(high - low for low, high in zip(box[:3], box[3:]))
@@ -228,7 +258,7 @@ def scene_from_cells(cells, format, notices, records=None, source_hash="", entri
             continue
         transform = np.eye(4)
         transform[:3, 3] = position
-        material, color = mc_material((state.copied_material or state).name)
+        material, color = material_color((state.copied_material or state).name)
         shape, size = "box", (1, 1, 1)
         props = dict(state.properties)
         from .smooth_shapes import smooth_geometry
@@ -307,26 +337,33 @@ def read_litematic(content):
             volume += int(np.prod(size))
         if volume > MAX_VOLUME:
             raise ValueError("Combined Litematic region volume exceeds limit")
-        schematic = Schematic.from_nbt(root)
+        from .packed_regions import regions
+
+        parsed_regions = regions(root)
         cells, notices, records = {}, Counter(), {}
         entries = []
         source_hash = hashlib.sha256(content).hexdigest()
-        for name, region in schematic.regions.items():
-            minimum = (region.min_x(), region.min_y(), region.min_z())
+        for region in parsed_regions:
+            name, minimum = region.name, region.minimum
+            templates = {}
             entities = {
                 tuple(coordinate + low for coordinate, low in zip(entity.position, minimum)): entity.data
                 for entity in region.tile_entities
             }
-            for x, y, z in region.block_positions():
+            for (x, y, z), block in region.blocks():
                 one = {}
+                key = (block.id, tuple(block.properties()))
+                if key not in templates:
+                    templates[key] = state_template(block)
+                position = tuple(a + b for a, b in zip(region.position, (x, y, z)))
                 accept(
                     one,
-                    (region.x + x, region.y + y, region.z + z),
-                    region[x, y, z],
+                    position,
+                    None,
                     notices,
                     entities.get((x, y, z)),
+                    template=templates[key],
                 )
-                position = (region.x + x, region.y + y, region.z + z)
                 if position in one:
                     record_path = ("Regions", name, f"{x},{y},{z}")
                     record = SourceRecord(
