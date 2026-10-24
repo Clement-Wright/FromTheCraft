@@ -2,6 +2,8 @@
 
 import subprocess
 import sys
+import pickle
+from dataclasses import fields
 
 import numpy as np
 import pytest
@@ -9,6 +11,80 @@ import pytest
 from fromthecraft.convert import convert
 from fromthecraft.minecraft import read_structure
 from fromthecraft.model import Part, Scene
+
+
+def test_per_cell_parts_use_bounded_storage_and_roundtrip_cached_state():
+    part = Part("wall", "box", (4, 1, 1), np.eye(4), "Stone", (1, 1, 1))
+    footprint = sys.getsizeof(part) + (sys.getsizeof(part.__dict__) if hasattr(part, "__dict__") else 0)
+    assert footprint < 250, "Millions of per-cell attribute dictionaries consume avoidable memory"
+    restored = pickle.loads(pickle.dumps(part))
+    assert restored.identity == part.identity
+    np.testing.assert_array_equal(restored.transform, part.transform)
+    legacy = Part.__new__(Part)
+    legacy.__setstate__(
+        {field.name: getattr(part, field.name) for field in fields(part) if field.name != "detail_sources"}
+    )
+    assert legacy.identity == part.identity
+    np.testing.assert_array_equal(legacy.transform, part.transform)
+    assert legacy.detail_sources == ()
+
+
+def test_voxel_keys_reuse_python_integer_storage_without_changing_order():
+    from fromthecraft.geometry import voxelize
+
+    source = Scene([Part("wall", "box", (3, 1, 3), np.eye(4), "Stone", (1, 1, 1))], "blueprint")
+    cells, _ = voxelize(source, extreme=True)
+    assert all(type(axis) is int for cell in cells for axis in cell)
+    assert list(cells) == [(x, 0, z) for x in range(3) for z in range(3)]
+    assert len({id(part.detail_sources) for part in cells.values()}) == 1
+
+
+@pytest.mark.parametrize("scale", [1, 2, 3, 4, 5])
+@pytest.mark.parametrize("span", [None, 0.03125, 4.173, (0.03125, 1.125, 4.173)])
+def test_bounded_local_sample_transform_preserves_every_float_bit(scale, span):
+    from fromthecraft.geometry import _local_samples
+    from fromthecraft.detail import DETAIL_SAMPLES
+
+    rng = np.random.default_rng(946)
+    batch = rng.integers(-2048, 2048, (7, 3))
+    inverse = rng.normal(size=(4, 4))
+    size = (0.03, 1.234, 61.37)
+    points = (batch[:, None, :] + DETAIL_SAMPLES).reshape(-1, 3) / scale
+    expected = (points @ inverse[:3, :3].T + inverse[:3, 3]) / size
+    if span is not None:
+        expected = expected * span
+    actual = _local_samples(batch, DETAIL_SAMPLES, inverse, size, scale, span)
+    np.testing.assert_array_equal(actual.view(np.uint64), expected.view(np.uint64))
+
+
+@pytest.mark.parametrize("exterior", [False, True])
+def test_sealed_interior_decorations_do_not_repeat_invisible_sampling(monkeypatch, exterior):
+    from dataclasses import replace
+    import fromthecraft.geometry as geometry
+
+    host = Part("hull", "box", (3, 3, 3), np.eye(4), "Stone", (0.95, 0.95, 0.95))
+    transform = np.eye(4)
+    transform[:3, 3] = (1.5, 2.5 if exterior else 1.5, 1.5)
+    accent = replace(
+        host, identity="decal", size=(0.5,) * 3, transform=transform, color=(0.1, 0.8, 0.8), decoration=True
+    )
+    options = dict(mods=("copycats",), extreme_detail=True, preference="color", decoration_mode="decorations")
+    reference = convert(Scene([host], "blueprint"), "nbt", **options)
+    calls, contains = [], geometry.contains
+
+    def sampled(shape, points):
+        calls.append(len(points))
+        return contains(shape, points)
+
+    monkeypatch.setattr(geometry, "contains", sampled)
+    result = convert(Scene([host, accent], "blueprint"), "nbt", **options)
+    if exterior:
+        assert calls
+        assert result.content != reference.content
+        assert any(part.color[1] > part.color[0] + 0.1 for part in result.scene.parts)
+    else:
+        assert result.content == reference.content
+        assert not calls, "An already sealed full cell cannot reveal buried decoration paint"
 
 
 @pytest.mark.parametrize("scale", [3, 5])

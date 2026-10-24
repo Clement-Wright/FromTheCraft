@@ -35,11 +35,7 @@ class GeometryCache:
             part = replace(part, detail_sources=sources, detail_surface=intern(part.detail_surface))
             compact[position] = part
             weight += (
-                getsizeof(position)
-                + getsizeof(part)
-                + getsizeof(part.__dict__)
-                + part.transform.nbytes
-                + getsizeof(part.detail_sources)
+                getsizeof(position) + getsizeof(part) + part.transform.nbytes + getsizeof(part.detail_sources)
             )
             weight += sum(getsizeof(pair) for pair in sources)
             for mask in (part.detail_surface, *(mask for _, mask in sources)):
@@ -52,7 +48,7 @@ class GeometryCache:
         # meshes. Count each retained mesh once, independently of its placements.
         seen = set()
         for part in scene.parts:
-            weight += getsizeof(part) + getsizeof(part.__dict__)
+            weight += getsizeof(part)
             if part.mesh:
                 for array in part.mesh:
                     if hasattr(array, "nbytes") and id(array) not in seen:

@@ -7,6 +7,7 @@ from concurrent.futures import TimeoutError
 import numpy as np
 from collections import OrderedDict
 from copy import copy
+from os import cpu_count
 
 from .model import Cancelled
 
@@ -19,6 +20,10 @@ except ImportError:
 # These bound cumulative work; temporary arrays remain batched independently.
 MAX_SURFACE_SEEDS = 200_000_000
 MAX_MESH_SAMPLE_WORK = 20_000_000_000
+
+
+def native_worker_count():
+    return max(1, min(8, cpu_count() or 1))
 
 
 @lru_cache(maxsize=64)
@@ -164,11 +169,12 @@ class MeshSampler:
         self.native_data = None
         self.native_leaves = {}
         self.executor = None
+        self.native_threads = 4
 
     def _native_query(self, points, arrays, closed):
         if self.executor is None or len(points) < 8192 or (closed and len(self.triangles) < 48):
             return _mesh_native.contains(points, *arrays, closed, self.radius)
-        step = (len(points) + 3) // 4
+        step = (len(points) + self.native_threads - 1) // self.native_threads
         futures = [
             self.executor.submit(
                 _mesh_native.contains, points[start : start + step], *arrays, closed, self.radius
@@ -271,7 +277,11 @@ class MeshSampler:
         return low, high, self._tree(order[:middle]), self._tree(order[middle:])
 
     def contains(self, points):
-        points = np.asarray(points).copy()
+        points = np.asarray(points)
+        # Closed meshes shear their query coordinates. Open meshes only read
+        # them, so their already contiguous batch can stay shared and immutable.
+        if self.closed or not points.flags.c_contiguous:
+            points = points.copy()
         if self.closed:
             points[:, 1] -= points[:, 0] * 0.1732050807568877
             points[:, 2] -= points[:, 0] * 0.3178372451957823

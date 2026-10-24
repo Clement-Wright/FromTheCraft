@@ -94,6 +94,51 @@ def test_parallel_native_queries_keep_original_bits_and_budget(monkeypatch, clos
     assert len(thread_ids) > 1, "Use multiple native workers for a dense mesh query"
 
 
+def test_eight_native_chunks_use_available_cores_and_keep_exact_bits(monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from fromthecraft.mesh_geometry import MeshSampler
+
+    rng = np.random.default_rng(817)
+    vertices = rng.random((180, 3))
+    indices = np.arange(180).reshape(-1, 3)
+    points = rng.uniform(-0.1, 1.1, (32768, 3))
+    sampler = MeshSampler(vertices, indices, closed=False)
+    arrays = sampler._native_arrays()
+    expected = sampler._native_query(points, arrays, False)
+    calls, native = [], _mesh_native.contains
+
+    def query(points, *args):
+        calls.append(len(points))
+        return native(points, *args)
+
+    monkeypatch.setattr(_mesh_native, "contains", query)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        sampler.executor, sampler.native_threads = pool, 8
+        actual = sampler._native_query(points, arrays, False)
+    assert actual == expected
+    assert calls == [4096] * 8
+
+
+def test_open_mesh_query_keeps_input_immutable_without_a_full_input_copy():
+    import tracemalloc
+    from fromthecraft.mesh_geometry import MeshSampler
+
+    sampler = MeshSampler(
+        np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]), np.array([[0, 1, 2]]), closed=False
+    )
+    sampler._native_arrays()
+    points = np.tile((0.25, 0.25, 0.01), (262144, 1))
+    tracemalloc.start()
+    try:
+        actual = sampler.contains(points)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert actual.all()
+    np.testing.assert_array_equal(points, np.broadcast_to((0.25, 0.25, 0.01), points.shape))
+    assert peak < points.nbytes, "Open meshes need no second copy of the complete query array"
+
+
 def test_robust_hits_on_open_triangle_seams_do_not_require_a_numpy_fallback():
     from fromthecraft.mesh_geometry import MeshSampler
     from mesh_reference import ReferenceMeshSampler

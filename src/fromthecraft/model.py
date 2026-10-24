@@ -1,5 +1,5 @@
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import MISSING, dataclass, field, fields
 from typing import Callable
 
 import numpy as np
@@ -31,7 +31,7 @@ class SourceRecord:
     geometry_status: str = "resolved"
 
 
-@dataclass
+@dataclass(slots=True)
 class Part:
     identity: str
     shape: str
@@ -51,6 +51,17 @@ class Part:
     replaces_host: bool = False
     detail_sources: tuple[tuple["Part", int], ...] = ()
     detail_surface: int = 0
+
+    def __getstate__(self):
+        return {item.name: getattr(self, item.name) for item in fields(self)}
+
+    def __setstate__(self, state):
+        # Keep trusted local caches made before slot storage readable.
+        for item in fields(self):
+            value = state.get(item.name, item.default)
+            if value is MISSING:
+                raise ValueError(f"Cached part is missing {item.name}")
+            setattr(self, item.name, value)
 
 
 @dataclass
