@@ -7,6 +7,11 @@ import type { Display } from "../types";
 import { BlockPicker, type HoveredBlock } from "./BlockPicker";
 import { surfaceGeometry, textureBatches } from "./TextureSurfaces";
 import { emptyFilter, filterPlanes, type ViewFilter } from "./ViewFilter";
+import {
+  orientedBatches,
+  reflectGeometry,
+  updateDepthRange,
+} from "./InstanceGeometry";
 
 function boxes(pieces: [number[], number[]][]) {
   const positions: number[] = [];
@@ -388,97 +393,117 @@ export default function PairedViewer({
             opacity: group.transparent ? 0.48 : 1,
             depthWrite: !group.transparent,
             side: T.DoubleSide,
+            polygonOffset: index === 0 && group.decoration === true,
+            polygonOffsetFactor: -1,
+            polygonOffsetUnits: -1,
           };
           const texturedGeometry = displayTextures
             ? surfaceGeometry(geometry)
             : geometry;
           resources.push(geometry);
           if (texturedGeometry !== geometry) resources.push(texturedGeometry);
-          for (const batch of textureBatches(
+          let reflected: T.BufferGeometry | undefined;
+          for (const textureBatch of textureBatches(
             group,
             models[index]?.blocks ?? [],
             displayTextures,
           )) {
-            const uniformTexture =
-              batch.textures.length > 0 &&
-              batch.textures.every((key) => key === batch.textures[0]);
-            const surfaceKeys = uniformTexture
-              ? batch.textures.slice(0, 1)
-              : batch.textures;
-            const materials = surfaceKeys.length
-              ? surfaceKeys.map((key) => {
-                  let texture = key ? textures.get(key) : undefined;
-                  if (key && !texture) {
-                    texture = new T.Texture();
-                    textureQueue.push({ key, texture });
-                    texture.colorSpace = T.SRGBColorSpace;
-                    texture.magFilter = T.NearestFilter;
-                    texture.minFilter = T.NearestMipmapNearestFilter;
-                    texture.wrapS = texture.wrapT = T.RepeatWrapping;
-                    textures.set(key, texture);
-                    resources.push(texture);
-                  }
-                  const material = new T.MeshStandardMaterial({
-                    ...settings,
-                    map: null,
-                  });
-                  material.userData.previewTexture = texture;
-                  if (texture && models[index]?.format !== "blueprint") {
-                    // Minecraft PNGs already contain their surface colors; flat fallback
-                    // faces still use the instance color, while FtD keeps its paint tint.
-                    material.onBeforeCompile = (shader) => {
-                      shader.fragmentShader = shader.fragmentShader.replace(
-                        "#include <color_fragment>",
-                        "#ifndef USE_MAP\n#include <color_fragment>\n#endif",
-                      );
-                    };
-                  }
-                  return material;
-                })
-              : [new T.MeshStandardMaterial(settings)];
-            const mesh = new T.InstancedMesh(
-              texturedGeometry,
-              materials.length === 1 ? materials[0] : materials,
-              batch.instances.length,
-            );
-            const matrix = new T.Matrix4();
-            const color = new T.Color();
-            for (let i = 0; i < mesh.count; i++) {
-              const originalInstance = batch.instances[i];
-              matrix.fromArray(group.matrices, originalInstance * 16);
-              mesh.setMatrixAt(i, matrix);
-              color.setRGB(
-                group.colors[originalInstance * 3],
-                group.colors[originalInstance * 3 + 1],
-                group.colors[originalInstance * 3 + 2],
-                T.SRGBColorSpace,
+            for (const batch of orientedBatches(group, textureBatch)) {
+              let renderGeometry = texturedGeometry;
+              if (batch.mirrored) {
+                if (!reflected) {
+                  reflected = reflectGeometry(texturedGeometry);
+                  resources.push(reflected);
+                }
+                renderGeometry = reflected;
+              }
+              const uniformTexture =
+                batch.textures.length > 0 &&
+                batch.textures.every((key) => key === batch.textures[0]);
+              const surfaceKeys = uniformTexture
+                ? batch.textures.slice(0, 1)
+                : batch.textures;
+              const materials = surfaceKeys.length
+                ? surfaceKeys.map((key) => {
+                    let texture = key ? textures.get(key) : undefined;
+                    if (key && !texture) {
+                      texture = new T.Texture();
+                      textureQueue.push({ key, texture });
+                      texture.colorSpace = T.SRGBColorSpace;
+                      texture.magFilter = T.NearestFilter;
+                      texture.minFilter = T.NearestMipmapNearestFilter;
+                      texture.wrapS = texture.wrapT = T.RepeatWrapping;
+                      textures.set(key, texture);
+                      resources.push(texture);
+                    }
+                    const material = new T.MeshStandardMaterial({
+                      ...settings,
+                      map: null,
+                    });
+                    material.userData.previewTexture = texture;
+                    if (texture && models[index]?.format !== "blueprint") {
+                      // Minecraft PNGs already contain their surface colors; flat fallback
+                      // faces still use the instance color, while FtD keeps its paint tint.
+                      material.onBeforeCompile = (shader) => {
+                        shader.fragmentShader = shader.fragmentShader.replace(
+                          "#include <color_fragment>",
+                          "#ifndef USE_MAP\n#include <color_fragment>\n#endif",
+                        );
+                      };
+                    }
+                    return material;
+                  })
+                : [new T.MeshStandardMaterial(settings)];
+              const mesh = new T.InstancedMesh(
+                renderGeometry,
+                materials.length === 1 ? materials[0] : materials,
+                batch.instances.length,
               );
-              mesh.setColorAt(i, color);
-            }
-            mesh.instanceMatrix.needsUpdate = true;
-            if (index === 0)
-              sourceMeshes.push({
-                mesh,
-                ids: batch.instances.map((i) => group.source_ids?.[i] ?? null),
-                colors: batch.instances.map((i) =>
-                  new T.Color().setRGB(
-                    group.colors[i * 3],
-                    group.colors[i * 3 + 1],
-                    group.colors[i * 3 + 2],
-                    T.SRGBColorSpace,
+              const matrix = new T.Matrix4();
+              const reflection = new T.Vector3(-1, 1, 1);
+              const color = new T.Color();
+              for (let i = 0; i < mesh.count; i++) {
+                const originalInstance = batch.instances[i];
+                matrix.fromArray(group.matrices, originalInstance * 16);
+                if (batch.mirrored) matrix.scale(reflection);
+                mesh.setMatrixAt(i, matrix);
+                color.setRGB(
+                  group.colors[originalInstance * 3],
+                  group.colors[originalInstance * 3 + 1],
+                  group.colors[originalInstance * 3 + 2],
+                  T.SRGBColorSpace,
+                );
+                mesh.setColorAt(i, color);
+              }
+              mesh.instanceMatrix.needsUpdate = true;
+              if (index === 0)
+                sourceMeshes.push({
+                  mesh,
+                  ids: batch.instances.map(
+                    (i) => group.source_ids?.[i] ?? null,
                   ),
+                  colors: batch.instances.map((i) =>
+                    new T.Color().setRGB(
+                      group.colors[i * 3],
+                      group.colors[i * 3 + 1],
+                      group.colors[i * 3 + 2],
+                      T.SRGBColorSpace,
+                    ),
+                  ),
+                });
+              mesh.computeBoundingSphere();
+              scene.add(mesh);
+              picker.add(
+                mesh,
+                batch.instances.map(
+                  (instance) => group.block_indices[instance],
                 ),
-              });
-            mesh.computeBoundingSphere();
-            scene.add(mesh);
-            picker.add(
-              mesh,
-              batch.instances.map((instance) => group.block_indices[instance]),
-              batch.instances.map(
-                (instance) => group.source_ids?.[instance] ?? null,
-              ),
-            );
-            resources.push(mesh, ...materials);
+                batch.instances.map(
+                  (instance) => group.source_ids?.[instance] ?? null,
+                ),
+              );
+              resources.push(mesh, ...materials);
+            }
           }
         }
         const outline = new T.Box3Helper(new T.Box3(), 0x285f40);
@@ -492,7 +517,10 @@ export default function PairedViewer({
         outline.renderOrder = 1;
         scene.add(outline);
         resources.push(outline.geometry, ...outlineMaterials);
-        const render = () => renderer.render(scene, camera);
+        const render = () => {
+          updateDepthRange(camera, bounds);
+          renderer.render(scene, camera);
+        };
         let bounds = frameBounds.clone();
         let currentPoseKey = "";
         let frameHelpers: T.Object3D[] = [];

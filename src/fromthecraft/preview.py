@@ -83,7 +83,7 @@ def preview(scene, offset=(0, 0, 0), textures=None):
         if placement is None or placement not in counted:
             inventory[material_key] = inventory.get(material_key, 0) + 1
             counted.add(placement)
-        key = (part.shape, part.transparent, id(part.mesh[0]) if part.mesh else None)
+        key = (part.shape, part.transparent, part.decoration, id(part.mesh[0]) if part.mesh else None)
         group = groups.setdefault(
             key,
             {
