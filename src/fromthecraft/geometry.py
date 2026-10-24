@@ -1,6 +1,7 @@
 from itertools import product, islice
 from dataclasses import replace
 from collections import deque
+from functools import lru_cache
 
 import numpy as np
 
@@ -60,12 +61,19 @@ def quaternion(values) -> np.ndarray:
     )
 
 
+@lru_cache(maxsize=1024)
+def _corners(size):
+    result = np.array(list(product(*[(0, n) for n in size])))
+    result.flags.writeable = False
+    return result
+
+
 def bounds(scene: Scene, scale=1):
     if not scene.parts:
         return np.zeros(3), np.zeros(3)
     low, high = np.full(3, np.inf), np.full(3, -np.inf)
     for part in scene.parts:
-        corners = np.array(list(product(*[(0, n) for n in part.size])))
+        corners = _corners(tuple(part.size))
         points = (corners @ part.transform[:3, :3].T + part.transform[:3, 3]) * scale
         low, high = np.minimum(low, points.min(0)), np.maximum(high, points.max(0))
     return low, high
@@ -133,6 +141,33 @@ def cell_shape(mask):
     return "box"
 
 
+@lru_cache(maxsize=256)
+def _cell_shape_bits(mask):
+    return cell_shape(np.asarray([bool(mask & (1 << bit)) for bit in range(8)]))
+
+
+@lru_cache(maxsize=256)
+def _detail_octants(mask):
+    from .detail import DETAIL_SAMPLES
+
+    selected = np.asarray([bool(mask & (1 << bit)) for bit in range(8)])
+    octants = (DETAIL_SAMPLES >= 0.5).astype(int) @ [4, 2, 1]
+    return int.from_bytes(np.packbits(selected[octants], bitorder="little").tobytes(), "little")
+
+
+def cell_candidates(low, high):
+    """Generate product(x, y, z) order without Python tuples per output cell."""
+    size = high - low
+    if np.any(size <= 0):
+        return np.empty((0, 3), dtype=int)
+    indices = np.arange(int(np.prod(size)), dtype=int)
+    result = np.empty((len(indices), 3), dtype=int)
+    result[:, 0] = indices // (size[1] * size[2]) + low[0]
+    result[:, 1] = indices // size[2] % size[1] + low[1]
+    result[:, 2] = indices % size[2] + low[2]
+    return result
+
+
 def merge_seed_masks(seed_masks, keys, octants, occupancy):
     """Combine duplicates with integer operations while retaining insertion order."""
     if len(keys) > 32:
@@ -176,6 +211,9 @@ def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers):
     full_mask = (1 << sample_count) - 1
     cells, occupancy, fallback = {}, {}, {}
     contributions = {}
+    from .mesh_geometry import MeshSamplerCache
+
+    samplers = MeshSamplerCache()
     low, high = bounds(scene, scale)
     origin = np.floor(low + 1e-6).astype(int)
     checked_size(np.maximum(1, np.ceil(high - 1e-6).astype(int) - origin))
@@ -189,12 +227,12 @@ def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers):
                 raise Cancelled("Conversion cancelled")
             if progress:
                 progress(index / max(1, len(scene.parts)) * 0.75)
-        corners = np.array(list(product(*[(0, n) for n in part.size])))
+        corners = _corners(tuple(part.size))
         world = (corners @ part.transform[:3, :3].T + part.transform[:3, 3]) * scale
         pmin, pmax = np.floor(world.min(0) + 1e-7).astype(int), np.ceil(world.max(0) - 1e-7).astype(int)
         if int(np.prod(pmax - pmin)) > MAX_PARTS:
             raise ValueError("One part's sampled footprint is too large; choose a smaller scale")
-        candidates = np.array(list(product(*[range(a, b) for a, b in zip(pmin, pmax)])))
+        candidates = cell_candidates(pmin, pmax)
         if len(candidates) == 0:
             continue
         # Boxes on integer grid boundaries need no occupancy samples.
@@ -205,10 +243,8 @@ def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers):
         mesh_sampler = None
         sampled = set() if extreme else None
         if part.mesh:
-            from .mesh_geometry import MeshSampler
-
             verts, indices, closed, thickness, span = part.mesh
-            mesh_sampler = MeshSampler(verts * span, indices, thickness, cancelled, closed)
+            mesh_sampler = samplers.get(verts * span, indices, thickness, cancelled, closed)
             mesh_sampler.executor = workers
         # Keep the denser detail grid within the former sampling memory budget.
         batch_size = max(1, 1_572_864 // sample_count)
@@ -239,15 +275,11 @@ def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers):
                 masks = (
                     mesh_sampler.contains(local * span) if mesh_sampler else contains(part.shape, local)
                 ).reshape(-1, sample_count)
+            packed = np.packbits(masks, axis=1, bitorder="little") if masks is not None else None
             for row, position in enumerate(batch):
-                mask = masks[row] if masks is not None else None
-                if mask is None or mask.any():
+                bits = full_mask if packed is None else int.from_bytes(packed[row], "little")
+                if bits:
                     key = tuple(position - origin)
-                    bits = (
-                        full_mask
-                        if mask is None
-                        else int.from_bytes(np.packbits(mask, bitorder="little").tobytes(), "little")
-                    )
                     occupancy[key] = occupancy.get(key, 0) | bits
                     cells.setdefault(key, part)
                     if extreme:
@@ -297,11 +329,7 @@ def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers):
                     continue
                 previous, owner = fallback.get(position, (0, part))
                 if detailed:
-                    selected = np.asarray([bool(mask & (1 << bit)) for bit in range(8)])
-                    octants = (samples >= 0.5).astype(int) @ [4, 2, 1]
-                    mask = int.from_bytes(
-                        np.packbits(selected[octants], bitorder="little").tobytes(), "little"
-                    )
+                    mask = _detail_octants(mask)
                 fallback[position] = (previous | mask, owner)
         if len(cells) > MAX_PARTS:
             raise ValueError(
@@ -346,8 +374,7 @@ def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers):
                 replace(part, shape="detailed", state=target) if target else replace(part, shape="box")
             )
         else:
-            occupied = np.asarray([bool(mask & (1 << bit)) for bit in range(8)])
-            cells[position] = replace(part, shape=cell_shape(occupied))
+            cells[position] = replace(part, shape=_cell_shape_bits(mask))
     return cells, tuple(float(n) for n in origin)
 
 

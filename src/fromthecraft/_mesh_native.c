@@ -117,6 +117,7 @@ static PyObject *contains(PyObject *self, PyObject *args) {
     result = PyBytes_FromStringAndSize(NULL, point_count);
     if (!result) goto cleanup;
     unsigned char *occupied = (unsigned char *)PyBytes_AS_STRING(result);
+    memset(occupied, 0, (size_t)point_count);
     unsigned long long work = 0;
     double cutoff = radius * radius + 1e-12;
     Py_BEGIN_ALLOW_THREADS
@@ -164,6 +165,9 @@ static PyObject *contains(PyObject *self, PyObject *args) {
                     if (!isfinite(distance) || fabs(distance - cutoff) <= margin ||
                         t[16] <= 1e-10 * t[13] * t[15]) triangle_uncertain = 1;
                     uncertain |= triangle_uncertain;
+                    /* The caller discards this entire attempt and repeats
+                     * the original NumPy batch once ambiguity is reported. */
+                    if (uncertain) goto classified;
                     if (distance <= cutoff) {
                         hits = 1;
                         /* A robust hit proves this union query. Later triangles
@@ -175,6 +179,7 @@ static PyObject *contains(PyObject *self, PyObject *args) {
         }
         occupied[i] = closed ? (unsigned char)(hits % 2) : (unsigned char)(hits != 0);
     }
+classified:
     Py_END_ALLOW_THREADS
     answer = Py_BuildValue("OKi", result, work, uncertain);
 cleanup:

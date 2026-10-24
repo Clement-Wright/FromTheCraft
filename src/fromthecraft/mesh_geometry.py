@@ -5,6 +5,8 @@ from functools import lru_cache
 from concurrent.futures import TimeoutError
 
 import numpy as np
+from collections import OrderedDict
+from copy import copy
 
 from .model import Cancelled
 
@@ -108,6 +110,44 @@ def surface_seeds(part, scale, cancelled=None):
         yield from row
 
 
+class MeshSamplerCache:
+    """Per-voxelization exact geometry reuse; no work/cancellation state is shared."""
+
+    def __init__(self, max_bytes=32 * 1024**2):
+        self.entries = OrderedDict()
+        self.bytes, self.max_bytes = 0, max_bytes
+
+    def get(self, vertices, indices, thickness, cancelled, closed):
+        key = (
+            vertices.dtype.str,
+            vertices.shape,
+            vertices.tobytes(),
+            indices.dtype.str,
+            indices.shape,
+            indices.tobytes(),
+            thickness,
+            closed,
+        )
+        entry = self.entries.pop(key, None)
+        if entry is None:
+            sampler = MeshSampler(vertices, indices, thickness, cancelled, closed)
+            # Conservative allowance for Python triangle/edge arrays, tree,
+            # coefficients and exact key bytes. Oversize meshes are not cached.
+            weight = len(key[2]) + len(key[5]) + len(indices) * 4096 + 4096
+        else:
+            original, weight = entry
+            sampler = copy(original)
+            sampler.cancelled, sampler.work, sampler.executor = cancelled, 0, None
+        if weight <= self.max_bytes:
+            while self.entries and self.bytes + (weight if entry is None else 0) > self.max_bytes:
+                _, (_, removed) = self.entries.popitem(last=False)
+                self.bytes -= removed
+            self.entries[key] = sampler, weight
+            if entry is None:
+                self.bytes += weight
+        return sampler
+
+
 class MeshSampler:
     def __init__(self, vertices, indices, thickness=0.125, cancelled=None, closed=None):
         self.closed = is_closed(vertices, indices) if closed is None else closed
@@ -141,7 +181,12 @@ class MeshSampler:
                 if self.cancelled and self.cancelled():
                     raise Cancelled("Conversion cancelled")
                 try:
-                    answers.append(future.result(timeout=0.05))
+                    answer = future.result(timeout=0.05)
+                    if answer[2]:
+                        for pending in futures:
+                            pending.cancel()
+                        return b"", 0, True
+                    answers.append(answer)
                     break
                 except TimeoutError:
                     continue

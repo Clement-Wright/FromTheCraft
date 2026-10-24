@@ -6,6 +6,18 @@ import pytest
 _mesh_native = pytest.importorskip("fromthecraft._mesh_native")
 
 
+def test_native_attempt_stops_when_full_numpy_fallback_is_inevitable():
+    from fromthecraft.mesh_geometry import MeshSampler
+
+    vertices = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    sampler = MeshSampler(vertices, np.array([[0, 1, 2]]), closed=False)
+    points = np.zeros((5000, 3))
+    result, work, uncertain = _mesh_native.contains(points, *sampler._native_arrays(), False, 0.0625)
+    assert uncertain
+    assert len(result) == len(points)
+    assert work <= 1, "Discard the native attempt as soon as original NumPy fallback is required"
+
+
 def test_voxelize_cancellation_does_not_wait_for_running_native_chunks(monkeypatch):
     import threading
 
