@@ -64,9 +64,16 @@ test("open, compare serialized output, export, invalidate and recover", async ({
   await page.getByLabel("Open structure file").setInputFiles(fixture);
   await expect(page.getByRole("status")).toHaveText(/Source ready/);
   await expect(page.getByLabel("Output scale").locator("option")).toHaveCount(
-    5,
+    7,
   );
   await expect(page.getByTestId("dimensions")).toHaveText("3 × 2 × 4");
+  for (const scale of [3, 5]) {
+    await page.getByLabel("Output scale").selectOption(String(scale));
+    await expect(page.getByTestId("dimensions")).toHaveText(
+      `${3 * scale} × ${2 * scale} × ${4 * scale}`,
+    );
+  }
+  await page.getByLabel("Output scale").selectOption("1");
   await page.getByRole("button", { name: "Convert", exact: true }).click();
   await expect(page.getByRole("status")).toHaveText(/ready to export/);
   const status = await page.request.get("/api/status").then((r) => r.json());
