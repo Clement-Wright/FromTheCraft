@@ -152,6 +152,17 @@ class EditLayer:
             "can_redo": self.cursor < len(self.commands),
         }
 
+    def geometry_key(self):
+        # Hiding and selection affect only the view. Exclusions and complete
+        # mapping state affect the derived scene, including Extreme paint owners.
+        return (
+            frozenset(self.excluded),
+            tuple(
+                (record, value["name"], tuple(sorted(value["properties"].items())), value["full_block"])
+                for record, value in sorted(self.mappings.items())
+            ),
+        )
+
     def derive(self, scene):
         parts = []
         for part in scene.parts:

@@ -10,7 +10,7 @@ from typing import Literal
 from urllib.parse import quote
 
 from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 from starlette.concurrency import run_in_threadpool
@@ -25,6 +25,7 @@ from .textures import TextureLibrary, MAX_ARCHIVE_BYTES
 from .compatibility import mod_choices, selected_mods
 from .edits import EditLayer
 from .projects import export_project, import_project
+from .conversion_cache import GeometryCache
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
@@ -44,6 +45,7 @@ class Session:
     generation: int = 0
     source: Scene | None = None
     source_bytes: bytes = b""
+    geometry_cache: GeometryCache = field(default_factory=GeometryCache)
     edits: EditLayer | None = None
     filename: str = "structure"
     state: str = "empty"
@@ -173,7 +175,10 @@ async def texture_archive(request: Request, file: list[UploadFile] = File(...)):
         if generation != session.generation:
             raise HTTPException(409, "Source or conversion changed while loading textures")
         session.converted = converted
-    return {"source": source_display, "converted": converted, "textures": session.textures.status()}
+    return await run_in_threadpool(
+        JSONResponse,
+        {"source": source_display, "converted": converted, "textures": session.textures.status()},
+    )
 
 
 @app.get("/api/heartbeat")
@@ -199,6 +204,7 @@ async def open_source(request: Request, file: UploadFile = File(...)):
         session.source = None
         session.edits = None
         session.source_bytes = b""
+        session.geometry_cache = GeometryCache()
     content = await file.read(32 * 1024**2 + 1)
     await file.close()
     if len(content) > 32 * 1024**2:
@@ -222,12 +228,15 @@ async def open_source(request: Request, file: UploadFile = File(...)):
         session.edits = EditLayer(scene)
         session.filename = Path(file.filename or "structure").stem
         session.state = "loaded"
-    return {
-        "source": display,
-        "notices": dict(scene.notices),
-        "filename": session.filename,
-        "edits": session.edits.snapshot(),
-    }
+    return await run_in_threadpool(
+        JSONResponse,
+        {
+            "source": display,
+            "notices": dict(scene.notices),
+            "filename": session.filename,
+            "edits": session.edits.snapshot(),
+        },
+    )
 
 
 @app.get("/api/edits")
@@ -487,6 +496,8 @@ def start_conversion(request: Request, options: Options):
         session.invalidate("working")
         generation, cancelled = session.generation, session.cancelled
         scene = session.edits.derive(session.source) if session.edits else session.source
+        geometry_cache = session.geometry_cache
+        geometry_key = session.edits.geometry_key() if session.edits else ()
 
     def progress(value):
         with session.lock:
@@ -509,6 +520,8 @@ def start_conversion(request: Request, options: Options):
                 options.decoration_mode,
                 options.surface_thickness,
                 extreme_detail=options.extreme_detail,
+                geometry_cache=geometry_cache,
+                geometry_key=geometry_key,
             )
             display = preview(result.scene, result.offset, session.textures)
             with session.lock:
@@ -550,7 +563,7 @@ def status(request: Request):
                 notices=dict(result.notices),
                 filename=session.filename + "_converted." + result.format,
             )
-        return payload
+        return JSONResponse(payload)
 
 
 @app.post("/api/invalidate")

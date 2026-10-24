@@ -63,6 +63,151 @@ def test_extreme_detail_api_and_project_settings_roundtrip(client):
     assert Options(format="nbt").extreme_detail is False
 
 
+def test_preview_responses_avoid_recursive_encoding_without_changing_json(client, monkeypatch):
+    import fastapi.encoders as encoders
+    from starlette.responses import JSONResponse
+
+    original, large_walks = encoders.jsonable_encoder, []
+
+    def track(value, *args, **kwargs):
+        if isinstance(value, list) and len(value) > 20:
+            large_walks.append(len(value))
+        return original(value, *args, **kwargs)
+
+    monkeypatch.setattr(encoders, "jsonable_encoder", track)
+    response = upload(client)
+    assert response.status_code == 200
+    assert response.content == JSONResponse(response.json()).body
+    assert not large_walks, "The preview already contains JSON-native values"
+    client.post("/api/convert", json={"format": "nbt"})
+    assert finished(client)["state"] == "ready"
+    response = client.get("/api/status")
+    assert response.content == JSONResponse(response.json()).body
+    assert not large_walks
+
+
+def test_geometry_cache_reuses_material_output_and_hollow_changes_but_invalidates_edits(client, monkeypatch):
+    import importlib
+    from fromthecraft.compatibility import selected_mods
+    from fromthecraft.edits import EditLayer
+    from fromthecraft.convert import read_file
+
+    module = importlib.import_module("fromthecraft.convert")
+    original, calls = module.voxelize, 0
+
+    def track(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(module, "voxelize", track)
+    monkeypatch.setattr("litemapy.schematic.time", lambda: 1700000000.0)
+    uploaded = upload(client).json()["source"]
+    settings = {"format": "nbt", "mods": ["copycats"], "extreme_detail": True}
+    for override in ({}, {"preference": "color"}, {"hollow": True}, {"format": "litematic"}):
+        options = {**settings, **override}
+        assert client.post("/api/convert", json=options).status_code == 200
+        status = finished(client)
+        assert status["state"] == "ready"
+        assert calls == 1, "Reuse geometry when only downstream options change"
+    # View-only edits must also reuse conversion geometry.
+    record = uploaded["records"][0]["id"]
+    assert client.post("/api/edits", json={"kind": "hide", "ids": [record]}).status_code == 200
+    client.post("/api/convert", json=settings)
+    assert finished(client)["state"] == "ready" and calls == 1
+    # Excluding a source record changes occupancy even at unchanged settings.
+    client.post("/api/edits", json={"kind": "exclude", "ids": [record]})
+    client.post("/api/convert", json=settings)
+    changed = finished(client)
+    assert changed["state"] == "ready" and calls == 2
+    scene = read_file(Path("tests/fixtures/asymmetric.blueprint").read_bytes(), ".blueprint")
+    layer = EditLayer(scene)
+    layer.apply({"kind": "exclude", "ids": [record]})
+    expected = module.convert(
+        layer.derive(scene), "nbt", mods=selected_mods(("copycats",)), extreme_detail=True
+    )
+    assert changed["sha256"] == hashlib.sha256(expected.content).hexdigest()
+    calls = 0
+    upload(client)
+    client.post("/api/convert", json=settings)
+    assert finished(client)["state"] == "ready" and calls == 1
+
+
+def test_geometry_settings_never_hit_an_incompatible_cached_stage(client, monkeypatch):
+    import importlib
+
+    module = importlib.import_module("fromthecraft.convert")
+    original, calls = module.voxelize, 0
+
+    def track(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(module, "voxelize", track)
+    upload(client)
+    settings = {"format": "nbt", "mods": ["copycats"]}
+    variants = [
+        {},
+        {"scale": 2},
+        {"detailed_copycats": True},
+        {"extreme_detail": True},
+        {"decoration_mode": "decorations"},
+        {"decoration_mode": "appearance"},
+        {"surface_thickness": 0.25},
+    ]
+    for count, change in enumerate(variants, 1):
+        client.post("/api/convert", json={**settings, **change})
+        assert finished(client)["state"] == "ready"
+        assert calls == count
+
+
+def test_geometry_cache_is_bounded_copies_cell_maps_and_ignores_cancelled_results():
+    import numpy as np
+    from fromthecraft.conversion_cache import GeometryCache
+    from fromthecraft.model import Part, Scene
+
+    part = Part("cube", "box", (1, 1, 1), np.eye(4), "Metal", (0.5, 0.5, 0.5))
+    scene, cells = Scene([part], "blueprint"), {(0, 0, 0): part}
+    small = GeometryCache(max_bytes=1)
+    small.put("key", scene, cells, (0, 0, 0))
+    assert small.get("key") is None
+    cache = GeometryCache()
+    cache.put("key", scene, cells, (0, 0, 0), lambda: True)
+    assert cache.get("key") is None
+    cache.put("key", scene, cells, (0, 0, 0))
+    copy = cache.get("key")[1]
+    copy.clear()
+    assert cache.get("key")[1] == cells
+    cache.put("other", scene, cells, (0, 0, 0))
+    assert cache.get("key") is None and cache.get("other") is not None
+
+
+def test_mapping_restore_and_history_have_exact_geometry_keys():
+    from fromthecraft.edits import EditLayer
+    from fromthecraft.convert import read_file
+
+    scene = read_file(Path("tests/fixtures/asymmetric.blueprint").read_bytes(), ".blueprint")
+    layer = EditLayer(scene)
+    record = next(iter(layer.records))
+    original = layer.geometry_key()
+    layer.apply(
+        {
+            "kind": "mapping",
+            "ids": [record],
+            "mapping": {"name": "minecraft:gold_block", "properties": {}, "full_block": True},
+        }
+    )
+    mapped = layer.geometry_key()
+    assert mapped != original
+    layer.undo()
+    assert layer.geometry_key() == original
+    layer.redo()
+    assert layer.geometry_key() == mapped
+    layer.apply({"kind": "restore", "ids": [record]})
+    assert layer.geometry_key() == original
+
+
 def test_edit_exclusion_invalidates_export_but_visibility_preserves_it(client):
     source = upload(client).json()["source"]
     record = source["records"][1]["id"]

@@ -24,6 +24,8 @@ def convert(
     decoration_mode="structure",
     surface_thickness=0.125,
     extreme_detail=False,
+    geometry_cache=None,
+    geometry_key=None,
 ):
     if decoration_mode not in {"structure", "decorations", "appearance"}:
         raise ValueError("Unknown decoration mode")
@@ -44,7 +46,18 @@ def convert(
         raise ValueError("Detailed Copycats requires Copycats+ and Minecraft output")
     if extreme_detail and ("copycats" not in mods or output == "blueprint"):
         raise ValueError("Extreme detail requires Copycats+ and Minecraft output")
-    scene = prepare_meshes(scene, decoration_mode, surface_thickness, scale)
+    stage_key = (
+        geometry_key,
+        scale,
+        detailed_copycats or extreme_detail,
+        extreme_detail,
+        decoration_mode,
+        surface_thickness,
+    )
+    cached = (
+        geometry_cache.get(stage_key) if geometry_cache is not None and geometry_key is not None else None
+    )
+    scene = cached[0] if cached else prepare_meshes(scene, decoration_mode, surface_thickness, scale)
     allowed = {block["name"] for slug in mods for block in MODS[slug]["blocks"]}
     for part in scene.parts:
         mapping = part.mapping_override
@@ -60,11 +73,20 @@ def convert(
             if not mapping.name.startswith("minecraft:") and mapping.name not in allowed:
                 raise ValueError(f"Enable the mod required by mapping {mapping.name}")
     options = {"extreme": True} if extreme_detail else {}
-    cells, offset = voxelize(
-        scene, scale, progress, cancelled, detailed=detailed_copycats or extreme_detail, **options
-    )
+    if cached:
+        if cancelled and cancelled():
+            raise Cancelled("Conversion cancelled")
+        _, cells, offset = cached
+        if progress:
+            progress(0.78)
+    else:
+        cells, offset = voxelize(
+            scene, scale, progress, cancelled, detailed=detailed_copycats or extreme_detail, **options
+        )
     if not cells:
         raise ValueError("No structural blocks remain after skipped blocks")
+    if not cached and geometry_cache is not None and geometry_key is not None:
+        geometry_cache.put(stage_key, scene, cells, offset, cancelled)
     notices = Counter(scene.notices)
     if hollow:
         before = len(cells)
@@ -94,7 +116,7 @@ def convert(
             if cancelled and cancelled():
                 raise Cancelled("Conversion cancelled")
             if progress:
-                progress(.88 + .03 * index / max(1, len(cells)))
+                progress(0.88 + 0.03 * index / max(1, len(cells)))
         states[position] = mc_target(part, preference, mods)
     full_fallbacks = sum(
         part.shape.startswith(("slab_", "step_"))
