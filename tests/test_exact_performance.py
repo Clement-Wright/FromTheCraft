@@ -158,3 +158,22 @@ def test_acceleration_cache_reuses_only_exact_geometry_with_independent_state():
     tiny = mesh.MeshSamplerCache(max_bytes=1)
     a = tiny.get(vertices, indices, 0.125, None, False)
     assert tiny.get(vertices, indices, 0.125, None, False).tree is not a.tree
+
+
+def test_repeated_material_classification_reuses_exact_immutable_inputs(monkeypatch):
+    from dataclasses import replace
+    from fromthecraft.palettes import mc_target_material
+
+    source = Part("material", "box", (1, 1, 1), np.eye(4), "Metal", (0.48123, 0.49123, 0.50123))
+    expected = mc_target_material(source, "balanced")
+    original, calls = np.ptp, 0
+
+    def counted(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(np, "ptp", counted)
+    for i in range(1000):
+        assert mc_target_material(replace(source, identity=str(i)), "balanced") == expected
+    assert calls <= 1

@@ -164,3 +164,101 @@ def test_malformed_litematic_keeps_legacy_validation(mutation):
     with pytest.raises(type(reference.value)) as actual:
         module.read_litematic(content)
     assert str(actual.value) == str(reference.value)
+
+
+@pytest.mark.parametrize(
+    "writer,reference",
+    [(module.write_structure, before.write_structure), (module.write_litematic, before.write_litematic)],
+)
+def test_repeated_export_templates_preserve_complete_file_bytes(writer, reference, monkeypatch):
+    from fromthecraft.model import State
+
+    monkeypatch.setattr("litemapy.schematic.time", lambda: 1700000000.0)
+    states = [
+        State("minecraft:stone"),
+        State("minecraft:oak_stairs", (("facing", "north"), ("half", "top"))),
+        State(
+            "copycats:copycat_layer",
+            (("facing", "up"), ("layers", "3")),
+            copied_material=State("minecraft:red_concrete"),
+        ),
+        State(
+            "copycats:copycat_byte",
+            (("bottom_northeast", "true"), ("top_southwest", "true")),
+            copied_materials=(
+                ("bottom_northeast", State("minecraft:gold_block")),
+                ("top_southwest", State("minecraft:glass")),
+            ),
+        ),
+    ]
+    cells = {
+        (x, y, z): states[(x + 3 * y + 7 * z) % len(states)]
+        for x in range(5)
+        for y in range(2)
+        for z in range(3)
+    }
+    assert writer(cells, (8, 4, 5)) == reference(cells, (8, 4, 5))
+
+
+def test_sparse_litematic_export_packs_in_batches_without_per_cell_bit_setters(monkeypatch):
+    from litemapy.storage import LitematicaBitArray
+    from fromthecraft.model import State
+
+    monkeypatch.setattr("litemapy.schematic.time", lambda: 1700000000.0)
+    cells = {(1, 2, 3): State("minecraft:stone"), (31, 30, 29): State("minecraft:glass")}
+    expected = before.write_litematic(cells, (32, 32, 32))
+    calls, original = 0, LitematicaBitArray.__setitem__
+
+    def counted(self, *args):
+        nonlocal calls
+        calls += 1
+        return original(self, *args)
+
+    monkeypatch.setattr(LitematicaBitArray, "__setitem__", counted)
+    assert module.write_litematic(cells, (32, 32, 32)) == expected
+    assert calls == 0, "Pack integer words in bounded batches instead of setting every air cell"
+
+
+def test_structure_entity_templates_are_prepared_once_per_state(monkeypatch):
+    from fromthecraft.model import State
+
+    state = State("copycats:copycat_layer", (("layers", "2"),), copied_material=State("minecraft:iron_block"))
+    cells = {(i, 0, 0): state for i in range(100)}
+    expected = before.write_structure(cells, (100, 1, 1))
+    original, calls = module.block_entity, 0
+
+    def counted(*args):
+        nonlocal calls
+        calls += 1
+        return original(*args)
+
+    monkeypatch.setattr(module, "block_entity", counted)
+    assert module.write_structure(cells, (100, 1, 1)) == expected
+    assert calls <= 2
+
+
+def test_unusual_litematic_output_coordinates_keep_the_library_path(monkeypatch):
+    from fromthecraft.model import State
+
+    monkeypatch.setattr("litemapy.schematic.time", lambda: 1700000000.0)
+    cells = {(-1, 0, 0): State("minecraft:stone"), (1, 0, 0): State("minecraft:glass")}
+    assert module.write_litematic(cells, (2, 1, 1)) == before.write_litematic(cells, (2, 1, 1))
+
+
+@pytest.mark.parametrize("palette_size", [1, 3, 5, 17, 33, 65])
+@pytest.mark.parametrize("sparse", [False, True])
+def test_litematic_export_palette_and_cross_word_bytes(palette_size, sparse, monkeypatch):
+    from fromthecraft.model import State
+
+    monkeypatch.setattr("litemapy.schematic.time", lambda: 1700000000.0)
+    states = [State(f"minecraft:test_{i}", (("z", str(i)), ("a", "b"))) for i in range(palette_size)]
+    cells = {
+        (x, y, z): states[(x + 7 * y + 17 * z) % palette_size]
+        for x in range(17)
+        for y in range(5)
+        for z in range(13)
+        if not sparse or (x + y + z) % 3 == 0
+    }
+    # Unknown structural states are accepted by both writers; preserve property
+    # insertion order and first-use palette order across non-divisor bit widths.
+    assert module.write_litematic(cells, (17, 5, 13)) == before.write_litematic(cells, (17, 5, 13))

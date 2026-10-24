@@ -206,18 +206,21 @@ def mc_target(part, preference, mods=()):
 
 
 def mc_target_material(part, preference):
-    if part.transparent:
-        dye = nearest_color("dye", part.color)
+    return _target_material(part.material, tuple(part.color), part.transparent, preference)
+
+
+@lru_cache(maxsize=4096)
+def _target_material(material, color, transparent, preference):
+    if transparent:
+        dye = nearest_color("dye", color)
         return State("minecraft:" + dye + "_stained_glass")
-    if part.material in {"Wood", "Reinforced Wood"} and preference != "color":
-        base = State("minecraft:" + nearest_color("wood", part.color) + "_planks")
-    elif preference == "color" or (
-        preference == "balanced" and (np.ptp(part.color) > 0.15 or max(part.color) < 0.35)
-    ):
-        dye = nearest_color("dye", part.color)
+    if material in {"Wood", "Reinforced Wood"} and preference != "color":
+        base = State("minecraft:" + nearest_color("wood", color) + "_planks")
+    elif preference == "color" or (preference == "balanced" and (np.ptp(color) > 0.15 or max(color) < 0.35)):
+        dye = nearest_color("dye", color)
         base = State("minecraft:" + dye + "_concrete")
-    elif part.material == "Stone":
+    elif material == "Stone":
         base = State("minecraft:stone")
     else:
         base = State("minecraft:iron_block")
-    return mod_target(base, part.material, tuple(part.color), False, preference, ())
+    return mod_target(base, material, color, False, preference, ())

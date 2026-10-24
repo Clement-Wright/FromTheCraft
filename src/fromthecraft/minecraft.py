@@ -91,17 +91,35 @@ def parse_nbt(content):
         raise ValueError(f"Invalid NBT: {exc}") from exc
 
 
+def _entity_factory():
+    @lru_cache(maxsize=4096)
+    def template(state):
+        validate_state(state)
+        return block_entity(state, (0, 0, 0))
+
+    def at(state, position):
+        original = template(state)
+        if original is None:
+            return None
+        result = nbt.Compound(original)
+        for axis, value in zip("xyz", position):
+            result[axis] = nbt.Int(value)
+        return result
+
+    return at
+
+
 def write_structure(cells: dict, size) -> bytes:
     checked_size(size)
     palette, indices, blocks = [], {}, []
+    entity_at = _entity_factory()
     for position, state in sorted(cells.items()):
-        validate_state(state)
+        entity = entity_at(state, position)
         bare = State(state.name, state.properties)
         if bare not in indices:
             indices[bare] = len(palette)
             palette.append(block_state_tag(bare))
         block = nbt.Compound({"pos": nbt.List[nbt.Int](position), "state": nbt.Int(indices[bare])})
-        entity = block_entity(state, position)
         if entity is not None:
             block["nbt"] = entity
         blocks.append(block)
@@ -390,11 +408,22 @@ def read_litematic(content):
 
 def write_litematic(cells, size):
     checked_size(size)
-    region = Region(0, 0, 0, *[int(n) for n in size])
+    from .litematic_output import OutputRegion
+
+    ordinary = all(
+        len(pos) == 3
+        and all(
+            isinstance(n, (int, np.integer)) and not isinstance(n, (bool, np.bool_)) and 0 <= n < size[axis]
+            for axis, n in enumerate(pos)
+        )
+        for pos in cells
+    )
+    region = (OutputRegion if ordinary else Region)(0, 0, 0, *[int(n) for n in size])
+    entity_at = _entity_factory()
+    states = lru_cache(maxsize=4096)(lambda name, properties: BlockState(name, **dict(properties)))
     for pos, state in cells.items():
-        validate_state(state)
-        region[pos] = BlockState(state.name, **dict(state.properties))
-        entity = block_entity(state, pos)
+        entity = entity_at(state, pos)
+        region[pos] = states(state.name, state.properties)
         if entity is not None:
             region.tile_entities.append(TileEntity(entity))
     root = Schematic(name="FromTheCraft", regions={"Structure": region}, mc_version=DATA_VERSION).to_nbt()

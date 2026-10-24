@@ -12,19 +12,19 @@ import numpy as np
 
 import nbtlib as nbt
 
-from litemapy import BlockState, Schematic
+from litemapy import BlockState, Region, Schematic, TileEntity
 
 from fromthecraft.ftd import CATALOG, CUBE_IDS, SLOPE_IDS
 
 from fromthecraft.geometry import checked_size
 
-from fromthecraft.model import MAX_PARTS, MAX_VOLUME, State, SourceRecord
+from fromthecraft.model import DATA_VERSION, MAX_PARTS, MAX_VOLUME, State, SourceRecord
 
 from fromthecraft.minecraft import MAX_BYTES, MAX_LIST_ITEMS, check_version, scene_from_cells
 
 from fromthecraft.palettes import MOD_STATES, validate_state, mc_policy
 
-from fromthecraft.copycats import read_material
+from fromthecraft.copycats import block_entity, block_state_tag, read_material
 
 
 def write_blueprint(cells, name="FromTheCraft"):
@@ -297,3 +297,46 @@ def read_litematic(content):
         return scene_from_cells(cells, "litematic", notices, records, source_hash, entries)
     except (KeyError, TypeError, IndexError) as exc:
         raise ValueError(f"Malformed Litematic: {exc}") from exc
+
+
+def write_structure(cells: dict, size) -> bytes:
+    checked_size(size)
+    palette, indices, blocks = [], {}, []
+    for position, state in sorted(cells.items()):
+        validate_state(state)
+        bare = State(state.name, state.properties)
+        if bare not in indices:
+            indices[bare] = len(palette)
+            palette.append(block_state_tag(bare))
+        block = nbt.Compound({"pos": nbt.List[nbt.Int](position), "state": nbt.Int(indices[bare])})
+        entity = block_entity(state, position)
+        if entity is not None:
+            block["nbt"] = entity
+        blocks.append(block)
+    root = nbt.File(
+        {
+            "DataVersion": nbt.Int(DATA_VERSION),
+            "size": nbt.List[nbt.Int](size),
+            "palette": nbt.List[nbt.Compound](palette),
+            "blocks": nbt.List[nbt.Compound](blocks),
+            "entities": nbt.List[nbt.Compound](),
+        }
+    )
+    stream = io.BytesIO()
+    root.write(stream)
+    return gzip.compress(stream.getvalue(), mtime=0)
+
+
+def write_litematic(cells, size):
+    checked_size(size)
+    region = Region(0, 0, 0, *[int(n) for n in size])
+    for pos, state in cells.items():
+        validate_state(state)
+        region[pos] = BlockState(state.name, **dict(state.properties))
+        entity = block_entity(state, pos)
+        if entity is not None:
+            region.tile_entities.append(TileEntity(entity))
+    root = Schematic(name="FromTheCraft", regions={"Structure": region}, mc_version=DATA_VERSION).to_nbt()
+    stream = io.BytesIO()
+    nbt.File(root).write(stream)
+    return gzip.compress(stream.getvalue(), mtime=0)
