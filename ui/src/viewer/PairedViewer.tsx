@@ -137,6 +137,7 @@ type View = {
   renderer: T.WebGLRenderer;
   highlight?: () => void;
   filter?: () => void;
+  frame: (bounds: T.Box3, mode: string, key: string) => void;
 };
 type Props = {
   source?: Display;
@@ -167,6 +168,12 @@ export default function PairedViewer({
 }: Props) {
   const hosts = [useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null)];
   const views = useRef<View[]>([]);
+  const inputs = useRef<([Display | undefined, boolean, string] | undefined)[]>(
+    [],
+  );
+  const disposers = useRef<((keepRenderer?: boolean) => void)[]>([]);
+  const frames = useRef<string[]>([]);
+  const syncing = useRef(false);
   const filterRef = useRef(filter);
   filterRef.current = filter;
   const poses = useRef<
@@ -195,15 +202,44 @@ export default function PairedViewer({
   }, [selectedIds, excludedIds]);
 
   useEffect(() => {
-    setHovered([]);
     setError("");
-    const cleanup: (() => void)[] = [];
-    let syncing = false;
     const models = [source, converted];
+    const frameBounds = new T.Box3();
+    for (const model of models)
+      if (model?.count) {
+        frameBounds.expandByPoint(
+          new T.Vector3(...(model.bounds[0] as [number, number, number])),
+        );
+        frameBounds.expandByPoint(
+          new T.Vector3(...(model.bounds[1] as [number, number, number])),
+        );
+      }
+    if (frameBounds.isEmpty())
+      frameBounds.set(new T.Vector3(-5, 0, -5), new T.Vector3(5, 5, 5));
+    const frameKey = JSON.stringify([
+      frameBounds.min.toArray(),
+      frameBounds.max.toArray(),
+      poseKey,
+    ]);
+    syncing.current = true;
     try {
       hosts.forEach((host, index) => {
+        const previous = inputs.current[index];
+        if (
+          previous?.[0] === models[index] &&
+          previous?.[1] === displayTextures &&
+          previous?.[2] === textureToken
+        )
+          return;
+        const retainedRenderer = views.current[index]?.renderer;
+        disposers.current[index]?.(true);
+        setHovered((old) =>
+          old.map((hit, i) => (i === index ? undefined : hit)),
+        );
         const element = host.current!;
-        const renderer = new T.WebGLRenderer({ antialias: true, alpha: false });
+        const renderer =
+          retainedRenderer ??
+          new T.WebGLRenderer({ antialias: true, alpha: false });
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
         renderer.setClearColor("#eceeea");
         renderer.domElement.setAttribute(
@@ -456,66 +492,65 @@ export default function PairedViewer({
         outline.renderOrder = 1;
         scene.add(outline);
         resources.push(outline.geometry, ...outlineMaterials);
-        const bounds = new T.Box3();
-        for (const model of models)
-          if (model?.count) {
-            bounds.expandByPoint(
-              new T.Vector3(...(model.bounds[0] as [number, number, number])),
-            );
-            bounds.expandByPoint(
-              new T.Vector3(...(model.bounds[1] as [number, number, number])),
-            );
-          }
-        if (bounds.isEmpty())
-          bounds.set(new T.Vector3(-5, 0, -5), new T.Vector3(5, 5, 5));
-        const center = bounds.getCenter(new T.Vector3());
-        const span = Math.max(5, bounds.getSize(new T.Vector3()).length());
-        const grid = new T.GridHelper(
-          Math.ceil(span * 2),
-          20,
-          0xb6c2b6,
-          0xd6dcd3,
-        );
-        grid.position.set(center.x, bounds.min.y - 0.03, center.z);
-        scene.add(grid);
-        resources.push(
-          grid.geometry,
-          ...(Array.isArray(grid.material) ? grid.material : [grid.material]),
-        );
-        const axes = new T.AxesHelper(Math.min(span / 4, 8));
-        axes.position.copy(bounds.min);
-        scene.add(axes);
-        resources.push(
-          axes.geometry,
-          ...(Array.isArray(axes.material) ? axes.material : [axes.material]),
-        );
-        const direction =
-          view === "top"
-            ? new T.Vector3(0, 1, 0.0001)
-            : view === "front"
-              ? new T.Vector3(0, 0, 1)
-              : view === "side"
-                ? new T.Vector3(1, 0, 0)
-                : new T.Vector3(1, 0.7, 1);
-        camera.position
-          .copy(center)
-          .add(
-            direction
-              .normalize()
-              .multiplyScalar(
-                fitDistance(bounds, direction, frameAspect, camera.fov),
-              ),
-          );
-        camera.up.set(0, 1, 0);
-        controls.target.copy(center);
-        const pose = poses.current[index];
-        if (pose?.key === poseKey) {
-          camera.position.copy(pose.position);
-          controls.target.copy(pose.target);
-        }
-        controls.update();
         const render = () => renderer.render(scene, camera);
-        const current: View = { camera, controls, render, renderer };
+        let bounds = frameBounds.clone();
+        let currentPoseKey = "";
+        let frameHelpers: T.Object3D[] = [];
+        let frameResources: { dispose: () => void }[] = [];
+        const frame = (next: T.Box3, mode: string, key: string) => {
+          bounds = next.clone();
+          for (const helper of frameHelpers) scene.remove(helper);
+          for (const resource of frameResources) resource.dispose();
+          const center = bounds.getCenter(new T.Vector3());
+          const span = Math.max(5, bounds.getSize(new T.Vector3()).length());
+          const grid = new T.GridHelper(
+            Math.ceil(span * 2),
+            20,
+            0xb6c2b6,
+            0xd6dcd3,
+          );
+          grid.position.set(center.x, bounds.min.y - 0.03, center.z);
+          const axes = new T.AxesHelper(Math.min(span / 4, 8));
+          axes.position.copy(bounds.min);
+          scene.add(grid, axes);
+          frameHelpers = [grid, axes];
+          frameResources = [
+            grid.geometry,
+            axes.geometry,
+            ...(Array.isArray(grid.material) ? grid.material : [grid.material]),
+            ...(Array.isArray(axes.material) ? axes.material : [axes.material]),
+          ];
+          if (currentPoseKey !== key) {
+            const direction =
+              mode === "top"
+                ? new T.Vector3(0, 1, 0.0001)
+                : mode === "front"
+                  ? new T.Vector3(0, 0, 1)
+                  : mode === "side"
+                    ? new T.Vector3(1, 0, 0)
+                    : new T.Vector3(1, 0.7, 1);
+            camera.position
+              .copy(center)
+              .add(
+                direction
+                  .normalize()
+                  .multiplyScalar(
+                    fitDistance(bounds, direction, frameAspect, camera.fov),
+                  ),
+              );
+            camera.up.set(0, 1, 0);
+            controls.target.copy(center);
+            const pose = poses.current[index];
+            if (pose?.key === key) {
+              camera.position.copy(pose.position);
+              controls.target.copy(pose.target);
+            }
+            currentPoseKey = key;
+          }
+          controls.update();
+          render();
+        };
+        const current: View = { camera, controls, render, renderer, frame };
         current.filter = () => {
           renderer.clippingPlanes = filterPlanes(filterRef.current, index);
           picker.clippingPlanes = renderer.clippingPlanes;
@@ -642,10 +677,10 @@ export default function PairedViewer({
         current.filter();
         const change = () => {
           clearHover();
-          if (syncing) return;
+          if (syncing.current) return;
           render();
           if (linkedRef.current) {
-            syncing = true;
+            syncing.current = true;
             const other = views.current[1 - index];
             if (other) {
               other.camera.position.copy(camera.position);
@@ -654,7 +689,7 @@ export default function PairedViewer({
               other.controls.update();
               other.render();
             }
-            syncing = false;
+            syncing.current = false;
           }
         };
         controls.addEventListener("change", change);
@@ -679,9 +714,9 @@ export default function PairedViewer({
         });
         resize.observe(element);
         loadImages();
-        cleanup.push(() => {
+        disposers.current[index] = (keepRenderer = false) => {
           poses.current[index] = {
-            key: poseKey,
+            key: currentPoseKey,
             position: camera.position.clone(),
             target: controls.target.clone(),
           };
@@ -697,21 +732,42 @@ export default function PairedViewer({
           resize.disconnect();
           controls.dispose();
           for (const resource of resources) resource.dispose();
-          renderer.dispose();
-          renderer.forceContextLoss();
-          renderer.domElement.remove();
-        });
+          for (const resource of frameResources) resource.dispose();
+          renderer.renderLists.dispose();
+          if (!keepRenderer) {
+            renderer.dispose();
+            renderer.forceContextLoss();
+            renderer.domElement.remove();
+          }
+        };
+        inputs.current[index] = [models[index], displayTextures, textureToken];
+        frames.current[index] = "";
+      });
+      views.current.forEach((current, index) => {
+        if (frames.current[index] !== frameKey) {
+          current.frame(frameBounds, view, poseKey);
+          current.filter?.();
+          frames.current[index] = frameKey;
+        }
       });
     } catch (problem) {
       setError(
         `3D preview unavailable: ${problem instanceof Error ? problem.message : String(problem)}`,
       );
+    } finally {
+      syncing.current = false;
     }
+  }, [source, converted, view, reset, displayTextures, textureToken]);
+
+  useEffect(() => {
     return () => {
-      for (const dispose of cleanup) dispose();
+      for (const dispose of disposers.current) dispose?.();
+      disposers.current = [];
+      inputs.current = [];
+      frames.current = [];
       views.current = [];
     };
-  }, [source, converted, view, reset, displayTextures, textureToken]);
+  }, []);
 
   useEffect(() => {
     if (linked && views.current.length === 2) {

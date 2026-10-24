@@ -28,19 +28,45 @@ export function textureBatches(
   >();
   const matrix = new T.Matrix4();
   const normal = new T.Vector3();
+  const uniforms = new Map<number, (string | undefined)[] | undefined>();
+  const orientations = new Map<string, (string | undefined)[]>();
   for (let instance = 0; instance < group.colors.length / 3; instance++) {
-    const textures = enabled
-      ? blocks[group.block_indices[instance]]?.textures
-      : undefined;
-    matrix.fromArray(group.matrices, instance * 16);
-    const keys = textures
-      ? normals.map(
-          (axis) =>
-            textures[
-              faces[faceIndex(normal.copy(axis).transformDirection(matrix))]
-            ],
-        )
-      : [];
+    const block = group.block_indices[instance];
+    const textures = enabled ? blocks[block]?.textures : undefined;
+    let keys: (string | undefined)[] = [];
+    if (textures) {
+      if (!uniforms.has(block)) {
+        const values = faces.map((face) => textures[face]);
+        uniforms.set(
+          block,
+          values.every((value) => value === values[0]) ? values : undefined,
+        );
+      }
+      const uniform = uniforms.get(block);
+      if (uniform) keys = uniform;
+      else {
+        const offset = instance * 16;
+        const key = JSON.stringify([
+          block,
+          ...[0, 1, 2, 4, 5, 6, 8, 9, 10].map(
+            (i) => group.matrices[offset + i],
+          ),
+        ]);
+        const cached = orientations.get(key);
+        if (cached) keys = cached;
+        else {
+          matrix.fromArray(group.matrices, offset);
+          keys = normals.map(
+            (axis) =>
+              textures[
+                faces[faceIndex(normal.copy(axis).transformDirection(matrix))]
+              ],
+          );
+          if (orientations.size >= 1024) orientations.clear();
+          orientations.set(key, keys);
+        }
+      }
+    }
     const signature = JSON.stringify(keys);
     let batch = batches.get(signature);
     if (!batch) {

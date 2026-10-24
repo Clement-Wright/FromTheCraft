@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PairedViewer from "./viewer/PairedViewer";
 import Materials from "./Materials";
 import ModPicker from "./ModPicker";
@@ -385,6 +385,17 @@ export default function App() {
   }, [edits, editBusy]);
 
   const hiddenKey = (edits?.hidden ?? []).join("\n");
+  const selectMaterialType = useCallback(
+    (key: string) => {
+      setSelected(
+        source?.records
+          ?.filter((record) => record.type_key === key)
+          .map((record) => record.id) ?? [],
+      );
+      setCandidates([]);
+    },
+    [source],
+  );
   const visibleSource = useMemo(() => {
     if (!source) return source;
     const hidden = new Set(hiddenKey ? hiddenKey.split("\n") : []);
@@ -970,14 +981,7 @@ export default function App() {
             source={source}
             converted={status.converted}
             stale={status.state === "stale"}
-            onSelectType={(key) => {
-              setSelected(
-                source?.records
-                  ?.filter((r) => r.type_key === key)
-                  .map((r) => r.id) ?? [],
-              );
-              setCandidates([]);
-            }}
+            onSelectType={selectMaterialType}
           />
           {source && (
             <SourceEditor

@@ -4,6 +4,31 @@ import fs from "node:fs";
 
 const fixture = path.resolve("../tests/fixtures/asymmetric.blueprint");
 
+test("conversion and camera changes retain the source canvas and render context", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: "Open file", exact: true }),
+  ).toBeEnabled();
+  await page.getByLabel("Open structure file").setInputFiles(fixture);
+  await expect(page.getByRole("status")).toHaveText(/Source ready/);
+  const canvas = await page
+    .getByLabel("Source 3D structural preview", { exact: true })
+    .elementHandle();
+  expect(canvas).not.toBeNull();
+  await page.getByRole("button", { name: "Convert", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText(/ready to export/);
+  expect(await canvas!.evaluate((node) => node.isConnected)).toBe(true);
+  for (const name of ["Top", "Front", "Side", "Fit both"]) {
+    await page.getByRole("button", { name, exact: true }).click();
+    expect(await canvas!.evaluate((node) => node.isConnected)).toBe(true);
+  }
+  expect(errors).toEqual([]);
+});
+
 test("scale changes during a real upload do not discard the source", async ({
   page,
 }) => {

@@ -1,8 +1,8 @@
-import { useEffect, useId, useState } from "react";
+import { memo, useEffect, useId, useMemo, useState } from "react";
 import type { Display } from "./types";
 import { blockStateText, copiedMaterialsText } from "./blockState";
 
-export default function Materials({
+export default memo(function Materials({
   source,
   converted,
   stale,
@@ -29,12 +29,19 @@ export default function Materials({
   }, [converted]);
   const model = selected === "source" ? source : converted;
   const materials = model?.materials ?? [];
-  const total = materials.reduce((sum, item) => sum + item.count, 0);
+  const total = useMemo(
+    () => materials.reduce((sum, item) => sum + item.count, 0),
+    [materials],
+  );
   const query = search.trim().toLowerCase();
-  const filtered = materials.filter((item) =>
-    `${blockStateText(item)} ${item.material} ${item.copied_material ? blockStateText(item.copied_material) : ""} ${item.copied_materials ? copiedMaterialsText(item.copied_materials) : ""}`
-      .toLowerCase()
-      .includes(query),
+  const filtered = useMemo(
+    () =>
+      materials.filter((item) =>
+        `${blockStateText(item)} ${item.material} ${item.copied_material ? blockStateText(item.copied_material) : ""} ${item.copied_materials ? copiedMaterialsText(item.copied_materials) : ""}`
+          .toLowerCase()
+          .includes(query),
+      ),
+    [materials, query],
   );
   const noun = selected === "source" ? "source part" : "exported block";
   return (
@@ -170,4 +177,4 @@ export default function Materials({
       </div>
     </section>
   );
-}
+});

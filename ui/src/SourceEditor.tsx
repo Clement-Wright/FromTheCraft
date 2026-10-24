@@ -1,5 +1,5 @@
 import type { EditSnapshot, SourceRecord } from "./types";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 export type EditCommand = {
   kind: string;
@@ -34,12 +34,36 @@ export default function SourceEditor({
   candidates: string[];
   error: string;
 }) {
-  const selectedSet = new Set(selected);
-  const selectedRecords = records.filter((r) => selectedSet.has(r.id));
-  const types = new Set(selectedRecords.map((r) => r.type_key));
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+  const selectedRecords = useMemo(
+    () => records.filter((r) => selectedSet.has(r.id)),
+    [records, selectedSet],
+  );
+  const types = useMemo(
+    () => new Set(selectedRecords.map((r) => r.type_key)),
+    [selectedRecords],
+  );
   const [attachments, setAttachments] = useState("");
   const [query, setQuery] = useState("");
-  const children = records.some((r) => r.host_id && selectedSet.has(r.host_id));
+  const children = useMemo(
+    () => records.some((r) => r.host_id && selectedSet.has(r.host_id)),
+    [records, selectedSet],
+  );
+  const found = useMemo(() => {
+    const matches: SourceRecord[] = [];
+    const search = query.toLowerCase();
+    for (const record of records) {
+      if (
+        `${record.name} ${record.type_key} ${record.path.join("/")}`
+          .toLowerCase()
+          .includes(search)
+      ) {
+        matches.push(record);
+        if (matches.length === 100) break;
+      }
+    }
+    return matches;
+  }, [records, query]);
   return (
     <section
       id="conversion-edits"
@@ -155,30 +179,23 @@ export default function SourceEditor({
           />
         </label>
         <div className="record-list">
-          {records
-            .filter((r) =>
-              `${r.name} ${r.type_key} ${r.path.join("/")}`
-                .toLowerCase()
-                .includes(query.toLowerCase()),
-            )
-            .slice(0, 100)
-            .map((r) => (
-              <button
-                key={r.id}
-                aria-pressed={selectedSet.has(r.id)}
-                onClick={(e) =>
-                  onSelect(
-                    e.ctrlKey || e.metaKey
-                      ? selectedSet.has(r.id)
-                        ? selected.filter((id) => id !== r.id)
-                        : [...selected, r.id]
-                      : [r.id],
-                  )
-                }
-              >
-                {r.name} · {r.kind} · {r.path.join("/")}
-              </button>
-            ))}
+          {found.map((r) => (
+            <button
+              key={r.id}
+              aria-pressed={selectedSet.has(r.id)}
+              onClick={(e) =>
+                onSelect(
+                  e.ctrlKey || e.metaKey
+                    ? selectedSet.has(r.id)
+                      ? selected.filter((id) => id !== r.id)
+                      : [...selected, r.id]
+                    : [r.id],
+                )
+              }
+            >
+              {r.name} · {r.kind} · {r.path.join("/")}
+            </button>
+          ))}
         </div>
         <p className="editor-hint">
           Showing up to 100 matches. Hidden and unresolved records remain
