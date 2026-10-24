@@ -208,6 +208,29 @@ def test_mapping_restore_and_history_have_exact_geometry_keys():
     assert layer.geometry_key() == original
 
 
+def test_geometry_cache_interns_equal_masks_before_applying_its_memory_budget():
+    import numpy as np
+    from dataclasses import replace
+    from fromthecraft.conversion_cache import GeometryCache
+    from fromthecraft.model import Part, Scene
+
+    owner = Part("source", "box", (1, 1, 1), np.eye(4), "Metal", (0.5, 0.5, 0.5))
+    raw = bytes([255]) * 704
+    cells = {}
+    for x in range(30):
+        mask = int.from_bytes(raw, "little")
+        cells[(x, 0, 0)] = replace(
+            owner, shape="extreme", detail_sources=((owner, mask),), detail_surface=mask
+        )
+    cache = GeometryCache(max_bytes=36_000)
+    cache.put("masks", Scene([owner], "blueprint"), cells, (0, 0, 0))
+    found = cache.get("masks")
+    assert found is not None, "Do not charge repeated immutable masks as independent allocations"
+    stored = found[1]
+    assert len({id(part.detail_sources[0][1]) for part in stored.values()}) == 1
+    assert all(part.detail_surface == cells[key].detail_surface for key, part in stored.items())
+
+
 def test_edit_exclusion_invalidates_export_but_visibility_preserves_it(client):
     source = upload(client).json()["source"]
     record = source["records"][1]["id"]

@@ -2,6 +2,8 @@
 
 from sys import getsizeof
 from threading import Lock
+from dataclasses import replace
+from functools import lru_cache
 
 
 class GeometryCache:
@@ -20,9 +22,18 @@ class GeometryCache:
         if len(cells) > self.max_cells:
             return
         weight = getsizeof(cells)
+        compact, counted_masks = {}, set()
+
+        @lru_cache(maxsize=8192)
+        def intern(mask):
+            return mask
+
         for index, (position, part) in enumerate(cells.items()):
             if index % 256 == 0 and cancelled and cancelled():
                 return
+            sources = tuple((owner, intern(mask)) for owner, mask in part.detail_sources)
+            part = replace(part, detail_sources=sources, detail_surface=intern(part.detail_surface))
+            compact[position] = part
             weight += (
                 getsizeof(position)
                 + getsizeof(part)
@@ -30,9 +41,11 @@ class GeometryCache:
                 + part.transform.nbytes
                 + getsizeof(part.detail_sources)
             )
-            weight += sum(
-                getsizeof(mask) + getsizeof(pair) for pair in part.detail_sources for mask in [pair[1]]
-            )
+            weight += sum(getsizeof(pair) for pair in sources)
+            for mask in (part.detail_surface, *(mask for _, mask in sources)):
+                if id(mask) not in counted_masks:
+                    counted_masks.add(id(mask))
+                    weight += getsizeof(mask)
             if weight > self.max_bytes:
                 return
         # Prepared decorative arrays can outlive the source's original local
@@ -48,4 +61,4 @@ class GeometryCache:
         if weight > self.max_bytes or cancelled and cancelled():
             return
         with self._lock:
-            self._key, self._value = key, (scene, cells.copy(), offset)
+            self._key, self._value = key, (scene, compact, offset)
