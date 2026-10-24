@@ -437,6 +437,110 @@ def test_unicode_source_filename_can_be_exported(client):
     assert "filename*=UTF-8''" in response.headers["content-disposition"]
 
 
+@pytest.mark.parametrize("scale", [1, 2, 3, 4, 5])
+def test_export_filename_includes_actual_upscale(client, scale):
+    upload(client)
+    client.post("/api/convert", json={"format": "nbt", "scale": scale})
+    ready = finished(client)
+    expected = f"asymmetric_converted{f'_{scale}x' if scale > 1 else ''}.nbt"
+    assert ready["filename"] == expected
+    response = client.get("/api/export", params={"result_id": ready["result_id"]})
+    assert expected in response.headers["content-disposition"]
+
+
+def test_custom_export_name_changes_only_filename(client):
+    from urllib.parse import quote
+
+    upload(client)
+    client.post("/api/convert", json={"format": "nbt", "scale": 2})
+    ready = finished(client)
+    original = client.get("/api/export", params={"result_id": ready["result_id"]}).content
+    response = client.get("/api/export", params={"result_id": ready["result_id"], "filename": "船 v2.litematic"})
+    assert response.status_code == 200
+    assert quote("船 v2.nbt") in response.headers["content-disposition"]
+    assert response.content == original
+    assert client.get("/api/status").json()["result_id"] == ready["result_id"]
+
+
+@pytest.mark.parametrize("name", ["../ship.nbt", "folder\\ship.nbt", "C:\\ship.nbt", "bad\r\nname",
+                                  "NUL.nbt", "COM¹", "a:b", "a" * 230, "", "name."])
+def test_export_rejects_invalid_names_without_losing_result(client, name):
+    upload(client)
+    client.post("/api/convert", json={"format": "nbt"})
+    ready = finished(client)
+    assert client.get("/api/export", params={"result_id": ready["result_id"], "filename": name}).status_code == 422
+    assert client.get("/api/status").json()["result_id"] == ready["result_id"]
+
+
+def test_native_save_uses_selected_destination_and_exact_bytes(client, monkeypatch, tmp_path):
+    import fromthecraft.app as module
+
+    selected = tmp_path / "船 custom.nbt"
+    selections = []
+
+    def choose(filename, directory):
+        selections.append((filename, directory))
+        return selected
+
+    monkeypatch.setattr(module, "save_file_picker", choose, raising=False)
+    assert client.get("/api/session").json()["can_save"] is True
+    upload(client)
+    client.post("/api/convert", json={"format": "nbt", "scale": 2})
+    ready = finished(client)
+    original = client.get("/api/export", params={"result_id": ready["result_id"]}).content
+    response = client.post("/api/export/save", json={"result_id": ready["result_id"]})
+    assert response.status_code == 200
+    assert response.json() == {"saved": True, "filename": selected.name, "path": str(selected)}
+    assert selected.read_bytes() == original
+    assert selections == [("asymmetric_converted_2x.nbt", "")]
+    client.post("/api/export/save", json={"result_id": ready["result_id"], "filename": "renamed"})
+    assert selections[-1] == ("renamed.nbt", str(tmp_path))
+    assert client.get("/api/status").json()["result_id"] == ready["result_id"]
+
+
+def test_native_save_cancel_stale_and_client_paths(client, monkeypatch, tmp_path):
+    import fromthecraft.app as module
+
+    monkeypatch.setattr(module, "save_file_picker", lambda *_: None, raising=False)
+    upload(client)
+    client.post("/api/convert", json={"format": "nbt"})
+    ready = finished(client)
+    body = {"result_id": ready["result_id"]}
+    assert client.post("/api/export/save", json=body).json() == {"saved": False}
+    assert client.post("/api/export/save", json={**body, "destination": str(tmp_path / "bad.nbt")}).status_code == 422
+    assert client.post("/api/export/save", json=body, headers={"X-FromTheCraft-Token": "wrong"}).status_code == 403
+
+    def stale(*_):
+        module.sessions[client.cookies["fromthecraft"]].invalidate()
+        return tmp_path / "stale.nbt"
+
+    monkeypatch.setattr(module, "save_file_picker", stale)
+    assert client.post("/api/export/save", json=body).status_code == 409
+    assert not (tmp_path / "stale.nbt").exists()
+
+
+def test_native_save_requires_capability_and_keeps_result_on_error(client, monkeypatch, tmp_path):
+    import fromthecraft.app as module
+
+    monkeypatch.setattr(module, "save_file_picker", None, raising=False)
+    assert client.get("/api/session").json()["can_save"] is False
+    upload(client)
+    client.post("/api/convert", json={"format": "nbt"})
+    ready = finished(client)
+    body = {"result_id": ready["result_id"]}
+    assert client.post("/api/export/save", json=body).status_code == 501
+    monkeypatch.setattr(module, "save_file_picker", lambda *_: tmp_path / "wrong.blueprint")
+    assert client.post("/api/export/save", json=body).status_code == 422
+    assert not list(tmp_path.iterdir())
+
+    def denied(*_):
+        raise PermissionError("Read-only folder")
+
+    monkeypatch.setattr(module, "save_file_picker", denied)
+    assert client.post("/api/export/save", json=body).status_code == 500
+    assert client.get("/api/status").json()["result_id"] == ready["result_id"]
+
+
 def test_hollow_option_reloads_the_exact_download_and_inventory(client):
     import json
     from fromthecraft.convert import read_file

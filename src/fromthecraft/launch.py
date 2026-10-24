@@ -38,6 +38,10 @@ def launch(port=0, open_browser=True, idle_timeout=180):
         )
     )
     application.shutdown_callback = lambda: setattr(server, "should_exit", True)
+    if sys.platform == "win32":
+        from .native_save import choose_save_file
+
+        application.save_file_picker = choose_save_file
     started = time.monotonic()
 
     def browser_and_lifecycle():
@@ -63,6 +67,7 @@ def launch(port=0, open_browser=True, idle_timeout=180):
     try:
         server.run(sockets=[listener])
     finally:
+        application.save_file_picker = None
         listener.close()
         for session in application.sessions.values():
             session.cancelled.set()

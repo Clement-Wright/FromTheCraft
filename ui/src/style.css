@@ -166,7 +166,8 @@ h2 {
   flex-direction: column;
 }
 .app-header {
-  height: 64px;
+  min-height: 82px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 26px;
@@ -193,6 +194,73 @@ h2 {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #627063;
+}
+.export-controls {
+  display: grid;
+  grid-template-columns: minmax(160px, 240px) auto auto;
+  align-items: end;
+  gap: 6px 8px;
+  flex-shrink: 0;
+}
+.export-name {
+  min-width: 0;
+}
+.export-name-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 19px;
+  gap: 8px;
+  font-size: 11px;
+  color: #526457;
+}
+.export-name input {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #bec8bf;
+  border-radius: 3px;
+  color: #25372c;
+  background: #fff;
+}
+.export-name input:disabled {
+  opacity: 0.5;
+}
+button.reset-name {
+  min-height: 0;
+  border: 0;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 400;
+  color: #355c44;
+  background: transparent;
+}
+.export-note {
+  grid-column: 1 / -1;
+  max-width: 430px;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  color: #526457;
+}
+@media (max-width: 1100px) {
+  .app-header {
+    gap: 14px;
+  }
+  .app-header .identity {
+    min-width: 165px;
+  }
+  .export-controls {
+    grid-template-columns: minmax(150px, 200px) auto auto;
+  }
+}
+@media (max-width: 700px) {
+  .app-header .export-controls {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+  .export-controls {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
 }
 .workbench {
   display: flex;

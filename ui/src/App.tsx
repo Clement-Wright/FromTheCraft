@@ -7,6 +7,7 @@ import ViewFilters from "./ViewFilters";
 import { emptyFilter, type ViewFilter } from "./viewer/ViewFilter";
 import ProjectControls from "./ProjectControls";
 import BlockBrowser from "./BlockBrowser";
+import ExportControls from "./ExportControls";
 import type { EditSnapshot } from "./types";
 import type { Display, ModChoice, Status, TextureStatus } from "./types";
 
@@ -19,6 +20,7 @@ const labels: Record<string, string> = {
   stale: "Options changed. Convert again before exporting.",
   cancelled: "Conversion cancelled. You can convert again.",
   exported: "Download started.",
+  saved: "Export saved.",
   failed: "Conversion failed.",
 };
 
@@ -61,6 +63,7 @@ export default function App() {
   const [reset, setReset] = useState(0);
   const [initialized, setInitialized] = useState(false);
   const [canClose, setCanClose] = useState(false);
+  const [canSave, setCanSave] = useState(false);
   const [catalog, setCatalog] = useState("Bundled FtD catalog");
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -76,6 +79,7 @@ export default function App() {
         const session = await response.json();
         token.current = session.token;
         setCanClose(session.can_close);
+        setCanSave(session.can_save ?? false);
         setModChoices(session.mod_choices ?? []);
         setTextureStatus(session.textures);
         setCatalog(
@@ -449,32 +453,6 @@ export default function App() {
     };
   }, [source, hiddenKey, showDecorations]);
 
-  async function download() {
-    const current = generation.current;
-    try {
-      const response = await fetch(
-        "/api/export?result_id=" + encodeURIComponent(status.result_id ?? ""),
-      );
-      if (!response.ok)
-        throw new Error("The result is stale. Convert again before exporting.");
-      const blob = await response.blob();
-      if (current !== generation.current) return;
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = status.filename ?? "structure.nbt";
-      anchor.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setStatus((previous) => ({ ...previous, state: "exported" }));
-    } catch (error) {
-      setStatus((previous) => ({
-        ...previous,
-        state: "failed",
-        error: (error as Error).message,
-      }));
-    }
-  }
-
   async function close() {
     try {
       await mutate(() => request("/api/close"));
@@ -551,17 +529,18 @@ export default function App() {
             {filename}
           </span>
         </div>
-        <button
-          className="primary"
-          disabled={
-            editBusy ||
-            !status.result_id ||
-            !["ready", "exported"].includes(status.state)
+        <ExportControls
+          key={source?.source_hash ?? filename}
+          status={status}
+          disabled={editBusy}
+          canSave={canSave}
+          request={request}
+          onExported={(id, state) =>
+            setStatus((previous) =>
+              previous.result_id === id ? { ...previous, state } : previous,
+            )
           }
-          onClick={() => void download()}
-        >
-          Export file
-        </button>
+        />
       </header>
       <div className="workbench">
         <aside className="settings">

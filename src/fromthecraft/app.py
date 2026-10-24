@@ -26,6 +26,7 @@ from .compatibility import mod_choices, selected_mods
 from .edits import EditLayer
 from .projects import export_project, import_project
 from .conversion_cache import GeometryCache
+from .exporting import export_filename, atomic_save
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
@@ -34,6 +35,7 @@ sessions = OrderedDict()
 sessions_lock = threading.Lock()
 STATIC = Path(__file__).with_name("static")
 shutdown_callback = None
+save_file_picker = None
 
 
 @dataclass
@@ -54,6 +56,8 @@ class Session:
     result: Result | None = None
     converted: dict | None = None
     result_id: str = ""
+    result_scale: float = 1
+    saved_directory: str = ""
     touched: float = field(default_factory=time.monotonic)
 
     def invalidate(self, state="stale"):
@@ -135,6 +139,7 @@ def open_session(request: Request, response: Response):
     return {
         "token": session.token,
         "can_close": shutdown_callback is not None,
+        "can_save": save_file_picker is not None,
         "ftd_catalog": CATALOG_INFO["version"],
         "ftd_catalog_entries": CATALOG_INFO["entries"],
         "mod_choices": mod_choices(),
@@ -528,6 +533,7 @@ def start_conversion(request: Request, options: Options):
                 if generation == session.generation and not cancelled.is_set():
                     session.result, session.converted = result, display
                     session.result_id = secrets.token_urlsafe(16)
+                    session.result_scale = options.scale
                     session.state, session.progress = "ready", 1
         except (ValueError, Cancelled) as exc:
             with session.lock:
@@ -561,7 +567,7 @@ def status(request: Request):
                 offset=result.offset,
                 sha256=hashlib.sha256(result.content).hexdigest(),
                 notices=dict(result.notices),
-                filename=session.filename + "_converted." + result.format,
+                filename=export_filename(session.filename, result.format, session.result_scale),
             )
         return JSONResponse(payload)
 
@@ -583,13 +589,15 @@ def cancel(request: Request):
 
 
 @app.get("/api/export")
-def export(request: Request, result_id: str = ""):
+def export(request: Request, result_id: str = "", filename: str | None = None):
     session = session_for(request)
     with session.lock:
         if session.result is None or result_id != session.result_id:
             raise HTTPException(409, "Convert again before exporting")
-        filename = "".join(c for c in session.filename if c.isalnum() or c in "-_ ")[:80] or "structure"
-        filename += f"_converted.{session.result.format}"
+        try:
+            filename = export_filename(session.filename, session.result.format, session.result_scale, filename)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
         fallback = "".join(c for c in filename if c.isascii()) or "structure"
         return Response(
             session.result.content,
@@ -598,6 +606,48 @@ def export(request: Request, result_id: str = ""):
                 "Content-Disposition": f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(filename)}"
             },
         )
+
+
+class SaveOptions(BaseModel):
+    model_config = {"extra": "forbid"}
+    result_id: str
+    filename: str | None = None
+
+
+@app.post("/api/export/save")
+def save_export(request: Request, options: SaveOptions):
+    session = session_for(request)
+    if save_file_picker is None:
+        raise HTTPException(501, "Native Save As is unavailable; use Export file")
+    with session.lock:
+        if session.result is None or options.result_id != session.result_id:
+            raise HTTPException(409, "Convert again before exporting")
+        result = session.result
+        directory = session.saved_directory
+        try:
+            filename = export_filename(session.filename, result.format, session.result_scale, options.filename)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+    try:
+        destination = save_file_picker(filename, directory)
+        if destination is None:
+            return {"saved": False}
+        destination = Path(destination)
+        if not destination.is_absolute() or destination.suffix.lower() != f".{result.format}":
+            raise HTTPException(422, f"Choose a filename ending in .{result.format}")
+        try:
+            export_filename("structure", result.format, custom=destination.name)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        with session.lock:
+            if (session.result is not result or options.result_id != session.result_id
+                    or session.cancelled.is_set()):
+                raise HTTPException(409, "The result changed while choosing a location; export again")
+            atomic_save(destination, result.content)
+            session.saved_directory = str(destination.parent)
+        return {"saved": True, "filename": destination.name, "path": str(destination)}
+    except OSError as exc:
+        raise HTTPException(500, f"Could not save export: {exc}") from exc
 
 
 @app.get("/")
