@@ -4,12 +4,17 @@ import path from "node:path";
 import * as T from "three";
 import type { Display } from "../src/types";
 import {
+  faces,
+  surfaceGeometry,
+  textureBatches,
+} from "../src/viewer/TextureSurfaces";
+import {
   orientedBatches,
   reflectGeometry,
   updateDepthRange,
 } from "../src/viewer/InstanceGeometry";
 
-test("reflected instance batches preserve world vertices, face textures and source indices", () => {
+test("reflected instance batches preserve world vertices and source indices", () => {
   const matrix = new T.Matrix4()
     .makeRotationY(0.7)
     .scale(new T.Vector3(-2, 3, 4))
@@ -22,7 +27,6 @@ test("reflected instance batches preserve world vertices, face textures and sour
     textures: ["e", "w", "u", "d", "s", "n"],
   });
   expect(batches.map((b) => b.instances)).toEqual([[0], [1]]);
-  expect(batches[1].textures).toEqual(["w", "e", "u", "d", "s", "n"]);
   const source = new T.BoxGeometry(),
     reflected = reflectGeometry(source);
   const positive = matrix.clone().scale(new T.Vector3(-1, 1, 1));
@@ -59,6 +63,44 @@ test("reflected instance batches preserve world vertices, face textures and sour
     );
     expect(b.sub(a).cross(c.sub(a)).dot(normal)).toBeGreaterThan(0);
   }
+});
+
+test("textured reflected faces match their world directions after batching", () => {
+  for (const axis of [0, 1, 2])
+    for (const angle of [0, 0.7, Math.PI / 2]) {
+      const scale = new T.Vector3(2, 3, 4);
+      scale.setComponent(axis, -scale.getComponent(axis));
+      const original = new T.Matrix4().makeRotationY(angle).scale(scale);
+      const group = {
+        matrices: original.elements,
+        colors: [1, 1, 1],
+        block_indices: [0],
+      } as Display["groups"][number];
+      const blocks = [
+        {
+          name: "directional",
+          material: "Stone",
+          properties: {},
+          textures: Object.fromEntries(faces.map((face) => [face, face])),
+        },
+      ];
+      const geometry = reflectGeometry(surfaceGeometry(new T.BoxGeometry()));
+      const positive = original.clone().scale(new T.Vector3(-1, 1, 1));
+      const normalMatrix = new T.Matrix3().getNormalMatrix(positive);
+      const batch = [...textureBatches(group, blocks, true)].flatMap((b) =>
+        orientedBatches(group, b),
+      )[0];
+      for (const surface of geometry.groups) {
+        const normal = new T.Vector3()
+          .fromBufferAttribute(geometry.getAttribute("normal"), surface.start)
+          .applyNormalMatrix(normalMatrix);
+        const magnitude = normal.toArray().map(Math.abs);
+        const direction = magnitude.indexOf(Math.max(...magnitude));
+        const expected =
+          faces[direction * 2 + (normal.getComponent(direction) < 0 ? 1 : 0)];
+        expect(batch.textures[surface.materialIndex!]).toBe(expected);
+      }
+    }
 });
 
 test("depth range follows the inspected ship without clipping an interior camera", () => {

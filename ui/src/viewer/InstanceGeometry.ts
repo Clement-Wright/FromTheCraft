@@ -26,11 +26,12 @@ export function orientedBatches(
       mirrored: false,
     });
   if (reflected.length) {
-    const keys = batch.textures;
     result.push({
       instances: reflected,
       mirrored: true,
-      textures: keys.length === 6 ? [keys[1], keys[0], ...keys.slice(2)] : keys,
+      // Geometry keeps its material groups. textureBatches already mapped each
+      // original group through the reflected instance to its world-facing key.
+      textures: batch.textures,
     });
   }
   return result;
