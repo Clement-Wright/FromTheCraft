@@ -5,7 +5,7 @@ from functools import lru_cache
 from concurrent.futures import TimeoutError
 
 import numpy as np
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from copy import copy
 from os import cpu_count
 
@@ -289,8 +289,80 @@ class MeshSampler:
         middle = len(order) // 2
         return low, high, self._tree(order[:middle]), self._tree(order[middle:])
 
+    def _parallel_contains(self, points):
+        """Schedule complete original query batches with at most one per worker."""
+        # Build shared immutable coefficients before workers read them. Each
+        # worker owns its budget counter and any lazy leaf-cache additions.
+        self._native_arrays()
+        starts = iter(range(0, len(points), 32768))
+        pending = deque()
+        result = np.empty(len(points), dtype=bool)
+
+        def submit(start):
+            if self.cancelled and self.cancelled():
+                raise Cancelled("Conversion cancelled")
+            worker = copy(self)
+            worker.executor, worker.cancelled, worker.work = None, None, 0
+            worker.native_leaves = self.native_leaves.copy()
+            future = self.executor.submit(worker.contains, points[start : start + 32768])
+            pending.append((start, worker, future))
+
+        try:
+            for _ in range(self.native_threads):
+                start = next(starts, None)
+                if start is None:
+                    break
+                submit(start)
+            while pending:
+                start, worker, future = pending[0]
+                while True:
+                    if self.cancelled and self.cancelled():
+                        raise Cancelled("Conversion cancelled")
+                    try:
+                        answer = future.result(timeout=0.05)
+                        break
+                    except TimeoutError:
+                        if future.done():
+                            # Completion can race the polling timeout. Read the
+                            # actual result, including a worker-raised timeout.
+                            answer = future.result()
+                            break
+                        for _start, _worker, other in pending:
+                            if other.done() and (other.cancelled() or other.exception() is not None):
+                                other.result()
+                        continue
+                self.work += worker.work
+                if self.work > MAX_MESH_SAMPLE_WORK:
+                    raise ValueError(
+                        "Decorative mesh sampling budget exceeded; choose a smaller scale or structure-only mode"
+                    )
+                result[start : start + len(answer)] = answer
+                pending.popleft()
+                start = next(starts, None)
+                if start is not None:
+                    submit(start)
+        finally:
+            for _start, _worker, future in pending:
+                future.cancel()
+        return result
+
     def contains(self, points):
         points = np.asarray(points)
+        if (
+            self.packet_size
+            and self.executor is not None
+            and _mesh_native is not None
+            and self.native_threads > 1
+            and points.dtype == np.float64
+            and points.ndim == 2
+            and points.shape[1] == 3
+            and points.flags.c_contiguous
+            and len(points) >= self.native_threads * 32768
+        ):
+            # Keep enough complete batches to occupy all workers. Small queries
+            # retain their existing within-batch parallelism. The worker runs
+            # the same code, including complete 32768-point NumPy fallback.
+            return self._parallel_contains(points)
         # Closed meshes shear their query coordinates. Open meshes only read
         # them, so their already contiguous batch can stay shared and immutable.
         if self.closed or not points.flags.c_contiguous:
