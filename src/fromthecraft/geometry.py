@@ -185,6 +185,40 @@ def candidate_batches(low, high, batch_size):
 
 def _local_samples(batch, samples, inverse, size, scale, span=None):
     """Preserve every arithmetic step while reusing the two large temporaries."""
+    from .mesh_geometry import _mesh_native
+
+    # Mesh preparation makes these transforms positive diagonal. Their dots
+    # contain one nonzero product, so they can be fused without changing BLAS
+    # rounding for general affine shapes or changing sample batch boundaries.
+    matrix = inverse[:3, :3]
+    if (
+        _mesh_native is not None
+        and hasattr(_mesh_native, "sample_points")
+        and batch.dtype == np.dtype(np.intp)
+        and batch.flags.c_contiguous
+        and samples.dtype == inverse.dtype == np.float64
+        and samples.flags.c_contiguous
+        and inverse.flags.c_contiguous
+        and len(batch) * len(samples) <= 1_572_864
+        and scale in (0.25, 0.5, 1, 2, 3, 4, 5)
+        and np.all(np.diag(matrix) > 0)
+        and np.array_equal(matrix, np.diag(np.diag(matrix)))
+        and np.all(np.isfinite(inverse))
+        and np.max(np.abs(inverse)) <= 1e12
+        and np.all(np.isfinite(samples))
+        and (not samples.size or np.max(np.abs(samples)) <= 1e9)
+        and (span is None or np.ndim(span) <= 1)
+    ):
+        dimensions = np.ascontiguousarray(size, dtype=float)
+        expansion = np.broadcast_to(1.0 if span is None else span, (3,)).copy()
+        if (
+            dimensions.shape == (3,)
+            and np.all((dimensions >= 1e-12) & (dimensions <= 1e12))
+            and np.all(np.isfinite(expansion))
+            and np.max(np.abs(expansion)) <= 1e12
+        ):
+            content = _mesh_native.sample_points(batch, samples, inverse, dimensions, scale, expansion)
+            return np.frombuffer(content, dtype=np.float64).reshape(-1, 3)
     points = (batch[:, None, :] + samples).reshape(-1, 3)
     points /= scale
     local = points @ inverse[:3, :3].T
@@ -213,7 +247,42 @@ def merge_seed_masks(seed_masks, keys, octants, occupancy):
                 seed_masks[key] = seed_masks.get(key, 0) | (1 << int(octant))
 
 
-def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=False, extreme=False, compact=False):
+def _mesh_seeds_covered(part, scale, origin, covered):
+    """Prove every clipped forward seed maps to an already covered cell."""
+    if not covered:
+        return False
+    matrix = part.transform[:3, :3]
+    if not np.all(np.diag(matrix) > 0) or not np.array_equal(matrix, np.diag(np.diag(matrix))):
+        return False
+    endpoints = np.asarray([(1e-5,) * 3, (1 - 1e-5,) * 3]) * part.size
+    world = (endpoints @ matrix.T + part.transform[:3, 3]) * scale
+    # Include transform rounding and the original +1e-7 floor bias. Ambiguous
+    # edge cells make this proof fail safely; the original seeds then run.
+    magnitude = (np.abs(endpoints @ matrix.T) + np.abs(part.transform[:3, 3])).max(0) * scale
+    margin = magnitude * (64 * np.finfo(float).eps) + 1e-9
+    if not np.all(np.isfinite(world)) or np.max(np.abs(world)) > 2**52:
+        return False
+    low = np.floor(world[0] - margin + 1e-7).astype(np.int64) - origin
+    high = np.floor(world[1] + margin + 1e-7).astype(np.int64) - origin
+    size = high - low + 1
+    if any(int(axis) <= 0 for axis in size):
+        return False
+    if int(size[0]) * int(size[1]) * int(size[2]) > min(len(covered), 65_536):
+        return False
+    return all(key in covered for key in product(*(range(int(a), int(b) + 1) for a, b in zip(low, high))))
+
+
+def voxelize(
+    scene: Scene,
+    scale=1,
+    progress=None,
+    cancelled=None,
+    detailed=False,
+    extreme=False,
+    compact=False,
+    optimized=False,
+    cell_filter=None,
+):
     """Sample source parts; compact shares identical cells for read-only conversion."""
     from concurrent.futures import ThreadPoolExecutor
     from .mesh_geometry import native_worker_count
@@ -222,7 +291,19 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=Fals
     workers = ThreadPoolExecutor(max_workers=native_threads, thread_name_prefix="mesh-samples")
     wait_for_workers = True
     try:
-        return _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers, native_threads, compact)
+        return _voxelize(
+            scene,
+            scale,
+            progress,
+            cancelled,
+            detailed,
+            extreme,
+            workers,
+            native_threads,
+            compact,
+            optimized,
+            cell_filter,
+        )
     except Cancelled:
         # Running chunks retain their own read-only inputs and discard results.
         # Do not hold up cancellation while those bounded queries finish.
@@ -232,7 +313,19 @@ def voxelize(scene: Scene, scale=1, progress=None, cancelled=None, detailed=Fals
         workers.shutdown(wait=wait_for_workers, cancel_futures=True)
 
 
-def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers, native_threads, compact=False):
+def _voxelize(
+    scene,
+    scale,
+    progress,
+    cancelled,
+    detailed,
+    extreme,
+    workers,
+    native_threads,
+    compact=False,
+    optimized=False,
+    cell_filter=None,
+):
     from .detail import DETAIL_SAMPLES, fit_detail
 
     detailed = detailed or extreme
@@ -277,6 +370,7 @@ def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers, nat
             mesh_sampler = samplers.get(verts * span, indices, thickness, cancelled, closed)
             mesh_sampler.executor = workers
             mesh_sampler.native_threads = native_threads
+            mesh_sampler.packet_size = 128 if optimized else 0
         # Keep the denser detail grid within the former sampling memory budget.
         batch_size = max(1, 1_572_864 // sample_count)
         full_group = {appearance: (part, full_mask)} if extreme else None
@@ -328,7 +422,9 @@ def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers, nat
                             contributions[key] = group
                             record_contribution(group, part, appearance, bits)
         # Forward sampling protects small features that fall between target sample centers.
-        if not aligned or min(part.size) * scale < 0.5 or part.shape != "box":
+        if (not aligned or min(part.size) * scale < 0.5 or part.shape != "box") and not (
+            part.mesh and _mesh_seeds_covered(part, scale, origin, sampled if extreme else occupancy)
+        ):
             axes = [
                 np.r_[
                     1e-4,
@@ -386,6 +482,10 @@ def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers, nat
                 contributions[position] = {appearance_key(part): (part, mask)}
     if len(cells) > MAX_PARTS:
         raise ValueError(f"Output exceeds {MAX_PARTS:,} occupied cells; choose a smaller scale or structure")
+    if cell_filter is not None:
+        cells = cell_filter(cells)
+        if extreme:
+            contributions = {position: contributions[position] for position in cells}
     full_sources = {}
     fit_owner, fitted = None, {}
     for index, (position, part) in enumerate(cells.items()):
@@ -393,7 +493,7 @@ def _voxelize(scene, scale, progress, cancelled, detailed, extreme, workers, nat
             if cancelled and cancelled():
                 raise Cancelled("Conversion cancelled")
             if progress:
-                progress(0.75 + 0.03 * index / max(1, len(cells)))
+                progress(0.88 if cell_filter is not None else 0.75 + 0.03 * index / max(1, len(cells)))
         mask = occupancy[position]
         if compact and part is not fit_owner:
             # First-owner insertion order groups a source record's cells.

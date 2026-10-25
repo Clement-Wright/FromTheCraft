@@ -1002,3 +1002,8 @@ button.reset-name {
     padding: 8px;
   }
 }
+.optimized-conversion[aria-pressed="true"] {
+  background: var(--green-light, #d7e6d8);
+  border-color: var(--green, #244b37);
+  color: var(--green, #244b37);
+}

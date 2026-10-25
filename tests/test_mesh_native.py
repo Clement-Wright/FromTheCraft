@@ -139,6 +139,38 @@ def test_open_mesh_query_keeps_input_immutable_without_a_full_input_copy():
     assert peak < points.nbytes, "Open meshes need no second copy of the complete query array"
 
 
+def test_mesh_results_need_only_one_byte_per_sample():
+    import tracemalloc
+    from fromthecraft.mesh_geometry import MeshSampler
+
+    sampler = MeshSampler(np.eye(3), np.array([[0, 1, 2]]), closed=False)
+    sampler._native_arrays()
+    points = np.tile((4.0, 4.0, 4.0), (262144, 1))
+    tracemalloc.start()
+    try:
+        result = sampler.contains(points)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert not result.any()
+    assert peak < len(points) * 3, "Do not allocate four-byte counters for boolean mesh occupancy"
+
+
+@pytest.mark.parametrize("count", [256, 257])
+def test_closed_numpy_parity_survives_byte_counter_wrap(monkeypatch, count):
+    from fromthecraft.mesh_geometry import MeshSampler
+    import fromthecraft.mesh_geometry as mesh
+    from mesh_reference import ReferenceMeshSampler
+
+    monkeypatch.setattr(mesh, "_mesh_native", None)
+    vertices = np.array([[1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [1.0, 0.0, 1.0]])
+    indices = np.tile((0, 1, 2), (count, 1))
+    points = np.array([[0.0, 0.1, 0.1], [0.0, 4.0, 4.0]])
+    expected = ReferenceMeshSampler(vertices, indices, closed=True).contains(points)
+    assert expected.tolist() == [bool(count % 2), False]
+    np.testing.assert_array_equal(MeshSampler(vertices, indices, closed=True).contains(points), expected)
+
+
 def test_robust_hits_on_open_triangle_seams_do_not_require_a_numpy_fallback():
     from fromthecraft.mesh_geometry import MeshSampler
     from mesh_reference import ReferenceMeshSampler

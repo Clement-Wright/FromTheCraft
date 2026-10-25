@@ -28,9 +28,7 @@ def native_worker_count():
 
 def _cross3(a, b):
     """The original cross-product arithmetic for the fixed three-component case."""
-    return np.array(
-        [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
-    )
+    return np.array([a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]])
 
 
 @lru_cache(maxsize=64)
@@ -177,14 +175,18 @@ class MeshSampler:
         self.native_leaves = {}
         self.executor = None
         self.native_threads = 4
+        self.packet_size = 0
 
     def _native_query(self, points, arrays, closed):
+        packet = (
+            (self.packet_size,) if self.packet_size and getattr(_mesh_native, "PACKET_QUERIES", 0) else ()
+        )
         if self.executor is None or len(points) < 8192 or (closed and len(self.triangles) < 48):
-            return _mesh_native.contains(points, *arrays, closed, self.radius)
+            return _mesh_native.contains(points, *arrays, closed, self.radius, *packet)
         step = (len(points) + self.native_threads - 1) // self.native_threads
         futures = [
             self.executor.submit(
-                _mesh_native.contains, points[start : start + step], *arrays, closed, self.radius
+                _mesh_native.contains, points[start : start + step], *arrays, closed, self.radius, *packet
             )
             for start in range(0, len(points), step)
         ]
@@ -297,7 +299,9 @@ class MeshSampler:
             points[:, 1] -= points[:, 0] * 0.1732050807568877
             points[:, 2] -= points[:, 0] * 0.3178372451957823
             points[:, 1:] += (1e-10, 3.14159e-10)
-        result = np.zeros(len(points), dtype=np.int32)
+        # Open meshes OR boolean hits. Closed meshes need only parity: wrapping
+        # a byte discards multiples of 256 and therefore preserves that parity.
+        result = np.zeros(len(points), dtype=np.uint8)
 
         def visit(node, candidates, native=True):
             if self.cancelled and self.cancelled():

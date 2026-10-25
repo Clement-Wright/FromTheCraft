@@ -77,7 +77,7 @@ class Scene:
 @dataclass
 class Result:
     content: bytes
-    scene: Scene
+    scene: Scene | None
     format: str
     offset: tuple[float, float, float]
     notices: Counter

@@ -1,4 +1,5 @@
 from collections import Counter
+from dataclasses import replace
 
 import numpy as np
 
@@ -26,6 +27,8 @@ def convert(
     extreme_detail=False,
     geometry_cache=None,
     geometry_key=None,
+    optimized_conversion=False,
+    build_preview=True,
 ):
     if decoration_mode not in {"structure", "decorations", "appearance"}:
         raise ValueError("Unknown decoration mode")
@@ -53,6 +56,8 @@ def convert(
         extreme_detail,
         decoration_mode,
         surface_thickness,
+        optimized_conversion,
+        shell_thickness if optimized_conversion and hollow else None,
     )
     cached = (
         geometry_cache.get(stage_key) if geometry_cache is not None and geometry_key is not None else None
@@ -73,6 +78,18 @@ def convert(
             if not mapping.name.startswith("minecraft:") and mapping.name not in allowed:
                 raise ValueError(f"Enable the mod required by mapping {mapping.name}")
     options = {"extreme": True} if extreme_detail else {}
+    early_hollow = optimized_conversion and hollow
+    before_hollow = 0
+    if optimized_conversion:
+        options["optimized"] = True
+    if early_hollow:
+
+        def filter_interior(cells):
+            nonlocal before_hollow
+            before_hollow = len(cells)
+            return hollow_cells(cells, shell_thickness, cancelled, progress)
+
+        options["cell_filter"] = filter_interior
     if cached:
         if cancelled and cancelled():
             raise Cancelled("Conversion cancelled")
@@ -81,14 +98,25 @@ def convert(
             progress(0.78)
     else:
         cells, offset = voxelize(
-            scene, scale, progress, cancelled, detailed=detailed_copycats or extreme_detail, compact=True, **options
+            scene,
+            scale,
+            progress,
+            cancelled,
+            detailed=detailed_copycats or extreme_detail,
+            compact=True,
+            **options,
         )
     if not cells:
         raise ValueError("No structural blocks remain after skipped blocks")
+    if early_hollow and not cached:
+        scene = replace(scene, notices=scene.notices.copy())
+        scene.notices[
+            f"Hollow interior removed {before_hollow - len(cells):,} cells; kept a {shell_thickness}-cell exterior shell"
+        ] += 1
     if not cached and geometry_cache is not None and geometry_key is not None:
         geometry_cache.put(stage_key, scene, cells, offset, cancelled)
     notices = Counter(scene.notices)
-    if hollow:
+    if hollow and not early_hollow:
         before = len(cells)
         cells = hollow_cells(cells, shell_thickness, cancelled, progress)
         notices[
@@ -105,7 +133,7 @@ def convert(
         content = write_blueprint(cells)
         del cells
         notices["FtD output schema targets reference version 3.8.5.11; in-game acceptance is unverified"] += 1
-        return Result(content, read_blueprint(content), output, offset, notices)
+        return Result(content, read_blueprint(content) if build_preview else None, output, offset, notices)
     for part in cells.values():
         if "copycats" not in mods and part.transparent and part.shape.startswith(("slab_", "step_")):
             notices[
@@ -148,19 +176,29 @@ def convert(
             "Export requires these selected mods: " + ", ".join(MODS[slug]["label"] for slug in mods)
         ] += 1
     size = tuple(np.max(list(cells), axis=0) + 1)
+    # Only immutable target states are needed by the writer and preview now.
+    # Cached geometry remains owned by the session; release this local map.
+    del cells, cached, state_cache
     writer, reader = (
         (write_structure, read_structure) if output == "nbt" else (write_litematic, read_litematic)
     )
     if cancelled and cancelled():
         raise Cancelled("Conversion cancelled")
     content = writer(states, size)
-    # Reimport the actual export for preview after releasing the sampling and
-    # target grids, rather than retaining both while allocating a second ship.
-    del cells, states, state_cache
     if cancelled and cancelled():
         raise Cancelled("Conversion cancelled")
+    if not build_preview:
+        return Result(content, None, output, offset, notices)
     if progress:
         progress(0.95)
+    if optimized_conversion:
+        from .generated_preview import export_scene
+
+        display = export_scene(states, size, output, content, cancelled, progress)
+        return Result(content, display, output, offset, notices)
+    # Normal mode independently reimports the bytes. Optimized mode above
+    # uses the same decoder on the exact states emitted by the local writer.
+    del states
     return Result(content, reader(content), output, offset, notices)
 
 

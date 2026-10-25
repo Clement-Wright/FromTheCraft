@@ -71,6 +71,33 @@ def test_extreme_detail_api_and_project_settings_roundtrip(client):
     legacy = client.post("/api/project/open", json=saved)
     assert legacy.status_code == 200
     assert legacy.json()["settings"]["extreme_detail"] is False
+
+
+def test_optimized_conversion_api_project_preset_and_legacy_default(client, monkeypatch):
+    import fromthecraft.app as module
+
+    original, options = module.convert, []
+
+    def track(*args, **kwargs):
+        options.append(kwargs.get("optimized_conversion"))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(module, "convert", track)
+    upload(client)
+    settings = {"format": "nbt", "optimized_conversion": True, "hollow": True}
+    assert client.post("/api/convert", json=settings).status_code == 200
+    assert finished(client)["state"] == "ready"
+    assert options == [True]
+    for kind in ("project", "preset"):
+        saved = client.post(f"/api/{kind}/save", json={"settings": settings})
+        assert saved.status_code == 200
+        document = saved.json()
+        opened = client.post(f"/api/{kind}/open", json=document)
+        assert opened.status_code == 200 and opened.json()["settings"]["optimized_conversion"] is True
+        document["settings"].pop("optimized_conversion")
+        legacy = client.post(f"/api/{kind}/open", json=document)
+        assert legacy.status_code == 200 and legacy.json()["settings"]["optimized_conversion"] is False
+    assert client.get("/api/export").status_code == 409
     # Old projects/presets omit the new option; its model default is off.
     from fromthecraft.app import Options
 
@@ -164,6 +191,7 @@ def test_geometry_settings_never_hit_an_incompatible_cached_stage(client, monkey
     variants = [
         {},
         {"scale": 2},
+        {"optimized_conversion": True},
         {"detailed_copycats": True},
         {"extreme_detail": True},
         {"decoration_mode": "decorations"},

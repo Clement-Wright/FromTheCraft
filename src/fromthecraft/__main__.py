@@ -29,6 +29,11 @@ def main():
     )
     conversion.add_argument("--shell-thickness", type=int, choices=[1, 2, 3, 4], default=1)
     conversion.add_argument(
+        "--optimized-conversion",
+        action="store_true",
+        help="Batch coherent mesh queries at full resolution; hollow before fitting when enabled",
+    )
+    conversion.add_argument(
         "--detailed-copycats",
         action="store_true",
         help="Fit finer layers, bytes and panels (requires --mod copycats)",
@@ -78,6 +83,8 @@ def main():
             mods=args.mod,
             detailed_copycats=args.detailed_copycats,
             extreme_detail=args.extreme_detail,
+            optimized_conversion=args.optimized_conversion,
+            build_preview=False,
             decoration_mode=args.decoration_mode,
             surface_thickness=args.surface_thickness,
         )

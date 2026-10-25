@@ -286,6 +286,7 @@ class Options(BaseModel):
     preference: Literal["balanced", "material", "color"] = "balanced"
     detailed_copycats: bool = False
     extreme_detail: bool = False
+    optimized_conversion: bool = False
     decoration_mode: Literal["structure", "decorations", "appearance"] = "structure"
     surface_thickness: Literal[0.0625, 0.125, 0.25, 0.5] = 0.125
     hollow: bool = False
@@ -525,6 +526,7 @@ def start_conversion(request: Request, options: Options):
                 options.decoration_mode,
                 options.surface_thickness,
                 extreme_detail=options.extreme_detail,
+                optimized_conversion=options.optimized_conversion,
                 geometry_cache=geometry_cache,
                 geometry_key=geometry_key,
             )

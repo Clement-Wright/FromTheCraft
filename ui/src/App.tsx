@@ -45,6 +45,7 @@ export default function App() {
   const [mods, setMods] = useState<string[]>([]);
   const [detailedCopycats, setDetailedCopycats] = useState(false);
   const [extremeDetail, setExtremeDetail] = useState(false);
+  const [optimizedConversion, setOptimizedConversion] = useState(false);
   const [displayTextures, setDisplayTextures] = useState(false);
   const [showDecorations, setShowDecorations] = useState(false);
   const [decorationMode, setDecorationMode] = useState("structure");
@@ -232,6 +233,7 @@ export default function App() {
             shell_thickness: shellThickness,
             decoration_mode: decorationMode,
             surface_thickness: surfaceThickness,
+            optimized_conversion: optimizedConversion,
           }),
           true,
         ),
@@ -313,6 +315,7 @@ export default function App() {
       shell_thickness: shellThickness,
       decoration_mode: decorationMode,
       surface_thickness: surfaceThickness,
+      optimized_conversion: optimizedConversion,
     };
   }
 
@@ -332,6 +335,7 @@ export default function App() {
       setMods(s.mods);
       setDetailedCopycats(s.detailed_copycats);
       setExtremeDetail(s.extreme_detail ?? false);
+      setOptimizedConversion(s.optimized_conversion ?? false);
       setHollow(s.hollow);
       setShellThickness(s.shell_thickness);
       setDecorationMode(s.decoration_mode);
@@ -768,6 +772,21 @@ export default function App() {
             </div>
           </div>
           <div className="settings-actions">
+            <button
+              aria-pressed={optimizedConversion}
+              disabled={busy || editBusy}
+              className="optimized-conversion"
+              onClick={() => {
+                setOptimizedConversion(!optimizedConversion);
+                invalidate();
+              }}
+            >
+              Optimized Conversion
+            </button>
+            <p className="hint">
+              Batch nearby mesh queries at full detail. If Hollow interior is
+              enabled, skip fitting enclosed cells.
+            </p>
             <button
               className="primary convert"
               disabled={!source || busy || editBusy}
