@@ -88,9 +88,40 @@ def checked_size(size):
 
 
 def contains(shape, points):
+    from .mesh_geometry import _mesh_native
+
+    clipping = planes(shape)
+    if (
+        _mesh_native is not None
+        and hasattr(_mesh_native, "contains_primitive")
+        and isinstance(points, np.ndarray)
+        and points.dtype == np.float64
+        and points.ndim == 2
+        and points.shape[1] == 3
+        and points.flags.c_contiguous
+        and points.flags.aligned
+        and len(points) <= 1_572_864
+    ):
+        mode = {"wedge": 1, "curve": 2, "corner": 3}.get(shape, 0)
+        if shape.startswith("stairs"):
+            mode = 4
+            for offset, suffix in enumerate(("inner_left", "inner_right", "outer_left", "outer_right"), 5):
+                if suffix in shape:
+                    mode = offset
+                    break
+        coefficients = np.asarray(clipping, dtype=float).reshape(-1, 4)
+        if len(coefficients) <= 64 and np.all(np.isfinite(coefficients)) and (
+            not coefficients.size or np.max(np.abs(coefficients)) <= 1e12
+        ):
+            occupied, uncertain = _mesh_native.contains_primitive(points, coefficients, mode)
+            if not uncertain:
+                return np.frombuffer(occupied, dtype=bool).copy()
+    return _contains_numpy(shape, points, clipping)
+
+
+def _contains_numpy(shape, points, clipping):
     x, y, z = points.T
     inside = np.all((points >= -1e-8) & (points <= 1 + 1e-8), axis=1)
-    clipping = planes(shape)
     if clipping:
         coefficients = np.asarray(clipping)
         inside &= np.all(points @ coefficients[:, :3].T <= coefficients[:, 3] + 1e-8, axis=1)
@@ -187,22 +218,40 @@ def _local_samples(batch, samples, inverse, size, scale, span=None):
     """Preserve every arithmetic step while reusing the two large temporaries."""
     from .mesh_geometry import _mesh_native
 
-    # Mesh preparation makes these transforms positive diagonal. Their dots
-    # contain one nonzero product, so they can be fused without changing BLAS
-    # rounding for general affine shapes or changing sample batch boundaries.
     matrix = inverse[:3, :3]
+    diagonal = np.all(np.diag(matrix) > 0) and np.array_equal(matrix, np.diag(np.diag(matrix)))
+    from .detail import DETAIL_SAMPLES
+
+    # Discrete hull rotations multiply by exactly +/-1. The original grids
+    # stay away from integer coordinates, so their nonzero dot products have
+    # no zero-sign ambiguity. General affine and arbitrary-grid inputs retain
+    # their original BLAS arithmetic and sample batch boundaries.
+    axes = (
+        not diagonal
+        and _mesh_native is not None
+        and hasattr(_mesh_native, "axis_sample_points")
+        and (samples is SAMPLES or samples is DETAIL_SAMPLES)
+        and np.min(samples) >= 1e-6
+        and np.max(samples) <= 1 - 1e-6
+        and span is None
+        and np.all((matrix == 0) | (np.abs(matrix) == 1))
+        and np.all(np.count_nonzero(matrix, axis=0) == 1)
+        and np.all(np.count_nonzero(matrix, axis=1) == 1)
+    )
     if (
         _mesh_native is not None
         and hasattr(_mesh_native, "sample_points")
         and batch.dtype == np.dtype(np.intp)
         and batch.flags.c_contiguous
+        and batch.flags.aligned
         and samples.dtype == inverse.dtype == np.float64
         and samples.flags.c_contiguous
+        and samples.flags.aligned
         and inverse.flags.c_contiguous
+        and inverse.flags.aligned
         and len(batch) * len(samples) <= 1_572_864
         and scale in (0.25, 0.5, 1, 2, 3, 4, 5)
-        and np.all(np.diag(matrix) > 0)
-        and np.array_equal(matrix, np.diag(np.diag(matrix)))
+        and (diagonal or axes)
         and np.all(np.isfinite(inverse))
         and np.max(np.abs(inverse)) <= 1e12
         and np.all(np.isfinite(samples))
@@ -213,11 +262,13 @@ def _local_samples(batch, samples, inverse, size, scale, span=None):
         expansion = np.broadcast_to(1.0 if span is None else span, (3,)).copy()
         if (
             dimensions.shape == (3,)
+            and dimensions.flags.aligned
             and np.all((dimensions >= 1e-12) & (dimensions <= 1e12))
             and np.all(np.isfinite(expansion))
             and np.max(np.abs(expansion)) <= 1e12
         ):
-            content = _mesh_native.sample_points(batch, samples, inverse, dimensions, scale, expansion)
+            transform = _mesh_native.axis_sample_points if axes else _mesh_native.sample_points
+            content = transform(batch, samples, inverse, dimensions, scale, expansion)
             return np.frombuffer(content, dtype=np.float64).reshape(-1, 3)
     points = (batch[:, None, :] + samples).reshape(-1, 3)
     points /= scale
@@ -335,7 +386,7 @@ def _voxelize(
     cells, occupancy, fallback = {}, {}, {}
     contributions = {}
 
-    from .mesh_geometry import MeshSamplerCache
+    from .mesh_geometry import MeshSamplerCache, _mesh_native
 
     samplers = MeshSamplerCache()
     low, high = bounds(scene, scale)
@@ -370,7 +421,9 @@ def _voxelize(
             mesh_sampler = samplers.get(verts * span, indices, thickness, cancelled, closed)
             mesh_sampler.executor = workers
             mesh_sampler.native_threads = native_threads
-            mesh_sampler.packet_size = 128 if optimized else 0
+            mesh_sampler.packet_size = (
+                (2048 if closed and getattr(_mesh_native, "INTERVAL_PACKETS", 0) else 128) if optimized else 0
+            )
         # Keep the denser detail grid within the former sampling memory budget.
         batch_size = max(1, 1_572_864 // sample_count)
         full_group = {appearance: (part, full_mask)} if extreme else None

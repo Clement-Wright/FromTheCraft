@@ -8,6 +8,62 @@
 #include <stdint.h>
 #include <string.h>
 
+/* Outward-rounded IEEE-754 bounds certify whole packets against the literal
+ * closed-ray predicate. Uncertain intervals retain every per-point operation. */
+typedef struct { double lo, hi; } Interval;
+static double adjacent(double value, int upward, int *valid) {
+    if (!isfinite(value)) { *valid = 0; return value; }
+    uint64_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    if (value == 0) bits = upward ? UINT64_C(1) : UINT64_C(0x8000000000000001);
+    else if ((value > 0) == upward) bits++;
+    else bits--;
+    memcpy(&value, &bits, sizeof(value));
+    if (!isfinite(value)) *valid = 0;
+    return value;
+}
+static Interval widened(double lo, double hi, int *valid) {
+    Interval result = {adjacent(lo, 0, valid), adjacent(hi, 1, valid)};
+    return result;
+}
+static Interval iadd(Interval a, Interval b, int *valid) {
+    return widened(a.lo + b.lo, a.hi + b.hi, valid);
+}
+static Interval isub(Interval a, Interval b, int *valid) {
+    return widened(a.lo - b.hi, a.hi - b.lo, valid);
+}
+static Interval imul(Interval a, double b, int *valid) {
+    return b >= 0 ? widened(a.lo * b, a.hi * b, valid) : widened(a.hi * b, a.lo * b, valid);
+}
+static Interval idiv(Interval a, double b, int *valid) {
+    return b > 0 ? widened(a.lo / b, a.hi / b, valid) : widened(a.hi / b, a.lo / b, valid);
+}
+static int triangle_packet(const double *t, const double *low, const double *high) {
+    if (sizeof(double) != sizeof(uint64_t) || DBL_MANT_DIG != 53 || DBL_MAX_EXP != 1024) return 0;
+    for (int k = 0; k < 10; k++) if (!isfinite(t[k])) return 0;
+    for (int k = 0; k < 3; k++) if (!isfinite(low[k]) || !isfinite(high[k])) return 0;
+    if (fabs(t[9]) < 1e-14) return -1;
+    int valid = 1;
+    Interval y = {low[1], high[1]}, z = {low[2], high[2]};
+    Interval ay = {t[1], t[1]}, az = {t[2], t[2]};
+    Interval qy = isub(y, ay, &valid), qz = isub(z, az, &valid);
+    Interval u = idiv(isub(imul(qy, t[8], &valid), imul(qz, t[7], &valid), &valid), t[9], &valid);
+    if (!valid) return 0;
+    if (u.hi < 0) return -1;
+    Interval v = idiv(isub(imul(qz, t[4], &valid), imul(qy, t[5], &valid), &valid), t[9], &valid);
+    if (!valid) return 0;
+    if (v.hi < 0) return -1;
+    Interval sum = iadd(u, v, &valid);
+    if (!valid) return 0;
+    if (sum.lo >= 1) return -1;
+    Interval x = {t[0], t[0]};
+    x = iadd(iadd(x, imul(u, t[3], &valid), &valid), imul(v, t[6], &valid), &valid);
+    if (!valid) return 0;
+    if (x.hi <= low[0]) return -1;
+    if (u.lo >= 0 && v.lo >= 0 && sum.hi < 1 && x.lo > high[0]) return 1;
+    return 0;
+}
+
 static double dot3(const double *a, const double *b) {
     return (a[0] * b[0] + a[1] * b[1]) + a[2] * b[2];
 }
@@ -68,7 +124,7 @@ static int array_buffer(PyObject *obj, Py_buffer *view, int ndim, Py_ssize_t wid
     return 1;
 }
 
-static PyObject *sample_points(PyObject *self, PyObject *args) {
+static PyObject *sample_points_impl(PyObject *args, int axis_permutation) {
     PyObject *objects[5], *answer = NULL;
     Py_buffer views[5] = {{0}};
     double scale;
@@ -89,21 +145,45 @@ static PyObject *sample_points(PyObject *self, PyObject *args) {
     const Py_ssize_t *cells = views[0].buf;
     const double *samples = views[1].buf, *matrix = views[2].buf;
     const double *size = views[3].buf, *span = views[4].buf;
+    int source_axis[3] = {0, 1, 2}, used_axes = 0;
+    if (axis_permutation && !(scale == 0.25 || scale == 0.5 || scale == 1 ||
+                              scale == 2 || scale == 3 || scale == 4 || scale == 5)) {
+        PyErr_SetString(PyExc_ValueError, "Unsupported discrete-axis sample scale");
+        goto cleanup;
+    }
     for (int axis = 0; axis < 3; axis++) {
         if (!isfinite(size[axis]) || size[axis] <= 0 || !isfinite(span[axis]) ||
-            !isfinite(matrix[axis * 4 + 3]) || !isfinite(matrix[axis * 5]) || matrix[axis * 5] <= 0) {
+            !isfinite(matrix[axis * 4 + 3])) {
             PyErr_SetString(PyExc_ValueError, "Expected finite positive diagonal transform and size");
             goto cleanup;
         }
+        int found = 0;
         for (int other = 0; other < 3; other++) {
-            if (axis != other && matrix[axis * 4 + other] != 0) {
-                PyErr_SetString(PyExc_ValueError, "Expected a diagonal transform");
+            double coefficient = matrix[axis * 4 + other];
+            if (axis_permutation) {
+                if (coefficient != 0) {
+                    if (found || (coefficient != 1 && coefficient != -1) || (used_axes & (1 << other))) {
+                        PyErr_SetString(PyExc_ValueError, "Expected a signed unit-axis permutation");
+                        goto cleanup;
+                    }
+                    found = 1;
+                    source_axis[axis] = other;
+                    used_axes |= 1 << other;
+                }
+            } else if ((axis == other && (!isfinite(coefficient) || coefficient <= 0)) ||
+                       (axis != other && coefficient != 0)) {
+                PyErr_SetString(PyExc_ValueError, "Expected a positive diagonal transform");
                 goto cleanup;
             }
         }
+        if (axis_permutation && !found) {
+            PyErr_SetString(PyExc_ValueError, "Expected a signed unit-axis permutation");
+            goto cleanup;
+        }
     }
     for (Py_ssize_t i = 0; i < sample_count * 3; i++) {
-        if (!isfinite(samples[i])) {
+        if (!isfinite(samples[i]) ||
+            (axis_permutation && (samples[i] < 1e-6 || samples[i] > 1 - 1e-6))) {
             PyErr_SetString(PyExc_ValueError, "Expected finite sample coordinates");
             goto cleanup;
         }
@@ -112,7 +192,7 @@ static PyObject *sample_points(PyObject *self, PyObject *args) {
     answer = PyBytes_FromStringAndSize(NULL, point_count * 3 * (Py_ssize_t)sizeof(double));
     if (!answer) goto cleanup;
     double *output = (double *)PyBytes_AS_STRING(answer);
-    /* Prepared meshes have a positive diagonal inverse. Each matrix dot has
+    /* Prepared meshes and discrete axes have a single nonzero product. Each dot has
      * exactly one nonzero product; adding +0 preserves its zero sign before
      * translation. Strict floating point keeps every division and multiply
      * separate, matching the NumPy pipeline without its full-size temporaries. */
@@ -120,9 +200,10 @@ static PyObject *sample_points(PyObject *self, PyObject *args) {
     for (Py_ssize_t cell = 0; cell < cell_count; cell++) {
         for (Py_ssize_t sample = 0; sample < sample_count; sample++) {
             for (int axis = 0; axis < 3; axis++) {
-                double value = (double)cells[cell * 3 + axis] + samples[sample * 3 + axis];
+                int source = source_axis[axis];
+                double value = (double)cells[cell * 3 + source] + samples[sample * 3 + source];
                 value /= scale;
-                value *= matrix[axis * 5];
+                value *= matrix[axis * 4 + source];
                 value += 0.0;
                 value += matrix[axis * 4 + 3];
                 value /= size[axis];
@@ -137,10 +218,86 @@ cleanup:
     return answer;
 }
 
+static PyObject *sample_points(PyObject *self, PyObject *args) {
+    return sample_points_impl(args, 0);
+}
+
+static PyObject *axis_sample_points(PyObject *self, PyObject *args) {
+    return sample_points_impl(args, 1);
+}
+
+static PyObject *contains_primitive(PyObject *self, PyObject *args) {
+    PyObject *objects[2], *output = NULL, *answer = NULL;
+    Py_buffer views[2] = {{0}};
+    int mode, uncertain = 0;
+    if (!PyArg_ParseTuple(args, "OOi", &objects[0], &objects[1], &mode)) return NULL;
+    if (!array_buffer(objects[0], &views[0], 2, 3, 0) ||
+        !array_buffer(objects[1], &views[1], 2, 4, 0)) goto cleanup;
+    Py_ssize_t count = views[0].shape[0], plane_count = views[1].shape[0];
+    if (count > 1572864 || plane_count > 64 || mode < 0 || mode > 8) {
+        PyErr_SetString(PyExc_ValueError, "Invalid primitive sampling size or mode");
+        goto cleanup;
+    }
+    const double *points = views[0].buf, *coefficients = views[1].buf;
+    for (Py_ssize_t i = 0; i < plane_count * 4; i++) {
+        if (!isfinite(coefficients[i]) || fabs(coefficients[i]) > 1e12) {
+            PyErr_SetString(PyExc_ValueError, "Expected bounded finite primitive planes");
+            goto cleanup;
+        }
+    }
+    output = PyBytes_FromStringAndSize(NULL, count);
+    if (!output) goto cleanup;
+    unsigned char *occupied = (unsigned char *)PyBytes_AS_STRING(output);
+    const double upper = 1 + 1e-8;
+    Py_BEGIN_ALLOW_THREADS
+    for (Py_ssize_t i = 0; i < count; i++) {
+        const double *p = points + i * 3;
+        int hit = p[0] >= -1e-8 && p[0] <= upper && p[1] >= -1e-8 && p[1] <= upper &&
+                  p[2] >= -1e-8 && p[2] <= upper;
+        if (hit && plane_count) {
+            for (Py_ssize_t j = 0; j < plane_count; j++) {
+                const double *plane = coefficients + j * 4;
+                double value = dot3(p, plane), limit = plane[3] + 1e-8;
+                /* Two differently grouped three-term dots differ by less
+                 * than this bound, including BLAS FMA and subnormal rounding.
+                 * Near the threshold Python repeats the COMPLETE old batch. */
+                double magnitude = fabs(p[0] * plane[0]) + fabs(p[1] * plane[1]) +
+                                   fabs(p[2] * plane[2]) + fabs(limit) + 1;
+                if (fabs(value - limit) <= 64 * DBL_EPSILON * magnitude) uncertain = 1;
+                if (value > limit) { hit = 0; break; }
+            }
+        } else if (hit) {
+            if (mode == 1) hit = p[1] <= p[2] + 1e-8;
+            else if (mode == 2) {
+                double z = 1 - p[2], a = p[1] * p[1], b = z * z, value = a + b;
+                if (fabs(value - upper) <= 64 * DBL_EPSILON * (a + b + 2)) uncertain = 1;
+                hit = value <= upper;
+            } else if (mode == 3) hit = p[1] <= p[2] + 1e-8 && p[1] <= p[0] + 1e-8;
+            else if (mode >= 4) {
+                int high = p[2] >= 0.5;
+                if (mode == 5) high |= p[0] >= 0.5;
+                else if (mode == 6) high |= p[0] <= 0.5;
+                else if (mode == 7) high &= p[0] >= 0.5;
+                else if (mode == 8) high &= p[0] <= 0.5;
+                hit = p[1] < 0.5 || high;
+            }
+        }
+        occupied[i] = (unsigned char)hit;
+    }
+    Py_END_ALLOW_THREADS
+    answer = Py_BuildValue("Ni", output, uncertain);
+    output = NULL;
+cleanup:
+    Py_XDECREF(output);
+    for (int i = 0; i < 2; i++) if (views[i].obj) PyBuffer_Release(&views[i]);
+    return answer;
+}
+
 static PyObject *contains(PyObject *self, PyObject *args) {
     PyObject *objects[5], *result = NULL, *answer = NULL;
     Py_buffer views[5] = {{0}};
     Py_ssize_t *stack = NULL, *parents = NULL;
+    signed char *triangle_flags = NULL;
     int closed, uncertain = 0, packet_size = 0;
     double radius = 0;
     if (!PyArg_ParseTuple(args, "OOOOOp|di", &objects[0], &objects[1], &objects[2],
@@ -202,6 +359,10 @@ static PyObject *contains(PyObject *self, PyObject *args) {
             goto cleanup;
         }
     }
+    if (closed && packet_size) {
+        triangle_flags = PyMem_Malloc(index_count ? (size_t)index_count : 1);
+        if (!triangle_flags) { PyErr_NoMemory(); goto cleanup; }
+    }
     result = PyBytes_FromStringAndSize(NULL, point_count);
     if (!result) goto cleanup;
     unsigned char *occupied = (unsigned char *)PyBytes_AS_STRING(result);
@@ -245,6 +406,14 @@ static PyObject *contains(PyObject *self, PyObject *args) {
                 }
             }
             if (!leaf_count) continue;
+            if (closed) {
+                for (Py_ssize_t leaf = 0; leaf < leaf_count; leaf++) {
+                    const Py_ssize_t *node = nodes + leaves[leaf] * 4;
+                    for (Py_ssize_t j = node[2]; j < node[2] + node[3]; j++) {
+                        triangle_flags[j] = (signed char)triangle_packet(triangles + indices[j] * 10, minimum, maximum);
+                    }
+                }
+            }
         }
         for (Py_ssize_t i = first; i < end; i++) {
         const double *p = points + i * 3;
@@ -270,6 +439,10 @@ static PyObject *contains(PyObject *self, PyObject *args) {
             for (Py_ssize_t j = node[2]; j < node[2] + node[3]; j++) {
                 const double *t = triangles + indices[j] * (closed ? 10 : 38);
                 if (closed) {
+                    if (packet_size && triangle_flags[j]) {
+                        if (triangle_flags[j] > 0) hits++;
+                        continue;
+                    }
                     double denominator = t[9];
                     if (fabs(denominator) < 1e-14) continue;
                     double qy = p[1] - t[1], qz = p[2] - t[2];
@@ -312,6 +485,7 @@ cleanup:
     Py_XDECREF(result);
     PyMem_Free(stack);
     PyMem_Free(parents);
+    PyMem_Free(triangle_flags);
     for (int i = 0; i < 5; i++) if (views[i].obj) PyBuffer_Release(&views[i]);
     return answer;
 }
@@ -319,13 +493,16 @@ cleanup:
 static PyMethodDef methods[] = {
     {"contains", contains, METH_VARARGS, "Classify a bounded batch using the original mesh tree."},
     {"sample_points", sample_points, METH_VARARGS, "Fuse bounded positive diagonal sample transforms."},
+    {"axis_sample_points", axis_sample_points, METH_VARARGS, "Fuse bounded discrete-axis sample transforms."},
+    {"contains_primitive", contains_primitive, METH_VARARGS, "Filter exact primitive samples with conservative fallback."},
     {NULL, NULL, 0, NULL}
 };
 
 static struct PyModuleDef module = {PyModuleDef_HEAD_INIT, "_mesh_native", NULL, -1, methods};
 PyMODINIT_FUNC PyInit__mesh_native(void) {
     PyObject *result = PyModule_Create(&module);
-    if (result && PyModule_AddIntConstant(result, "PACKET_QUERIES", 1) < 0) {
+    if (result && (PyModule_AddIntConstant(result, "PACKET_QUERIES", 1) < 0 ||
+                   PyModule_AddIntConstant(result, "INTERVAL_PACKETS", 1) < 0)) {
         Py_DECREF(result);
         return NULL;
     }
