@@ -158,7 +158,7 @@ def _write_structure_tags(cells, size):
 def read_structure(content: bytes):
     root = parse_nbt(content)
     notices = Counter()
-    cells, records, templates = {}, {}, {}
+    templates = {}
     entries = []
     source_hash = hashlib.sha256(content).hexdigest()
     try:
@@ -177,28 +177,21 @@ def read_structure(content: bytes):
             if index not in templates:
                 templates[index] = state_template(BlockState.from_nbt(root["palette"][index]))
             accept(one, pos, None, notices, block.get("nbt"), template=templates[index])
-            record_path = ("blocks", str(index_record))
-            records.setdefault(
-                pos,
-                SourceRecord(
-                    f"{source_hash}:{'/'.join(record_path)}",
-                    str(root["palette"][index]["Name"]),
-                    "block",
-                    record_path,
-                    (),
-                ),
-            )
             if one:
+                record_path = ("blocks", str(index_record))
                 record = SourceRecord(
                     f"{source_hash}:{'/'.join(record_path)}", one[pos].name, "block", record_path, ()
                 )
                 entries.append((pos, one[pos], record))
-                cells.setdefault(pos, one[pos])
         if root.get("entities"):
             notices["Intentionally skipped entities"] += len(root["entities"])
     except (KeyError, TypeError, IndexError) as exc:
         raise ValueError(f"Malformed structure NBT: {exc}") from exc
-    return scene_from_cells(cells, "nbt", notices, records, source_hash, entries)
+    # Entries contain detached states and records; release tags before parts.
+    # The loop local can retain a large unused payload in its final record.
+    block = None
+    del root
+    return scene_from_cells({}, "nbt", notices, source_hash=source_hash, entries=entries)
 
 
 def check_version(version):

@@ -29,6 +29,8 @@ def test_all_native_axis_orientations_keep_original_coordinate_bits(scale):
 @pytest.mark.parametrize("samples", [SAMPLES, DETAIL_SAMPLES])
 def test_known_sampling_grids_dispatch_discrete_rotations_without_large_temporaries(monkeypatch, samples):
     assert hasattr(native, "axis_sample_points")
+    # Older native binaries still use their exact scalar transform.
+    monkeypatch.delattr(native, "table_sample_points", raising=False)
     calls = []
     transform = native.axis_sample_points
 

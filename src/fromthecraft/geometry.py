@@ -268,7 +268,12 @@ def _local_samples(batch, samples, inverse, size, scale, span=None):
             and np.max(np.abs(expansion)) <= 1e12
         ):
             transform = _mesh_native.axis_sample_points if axes else _mesh_native.sample_points
-            content = transform(batch, samples, inverse, dimensions, scale, expansion)
+            if len(batch) >= 16 and len(samples) >= 64 and hasattr(_mesh_native, "table_sample_points"):
+                content = _mesh_native.table_sample_points(
+                    batch, samples, inverse, dimensions, scale, expansion, axes
+                )
+            else:
+                content = transform(batch, samples, inverse, dimensions, scale, expansion)
             return np.frombuffer(content, dtype=np.float64).reshape(-1, 3)
     points = (batch[:, None, :] + samples).reshape(-1, 3)
     points /= scale
@@ -382,7 +387,14 @@ def _voxelize(
     detailed = detailed or extreme
     samples = DETAIL_SAMPLES if detailed else SAMPLES
     sample_count = len(samples)
-    full_mask = (1 << sample_count) - 1
+
+    @lru_cache(maxsize=8192)
+    def intern_mask(mask):
+        # Detail masks contain 5,632 bits. Repeated slopes and panels can share
+        # immutable values without retaining an unbounded set of sampled masks.
+        return mask
+
+    full_mask = intern_mask((1 << sample_count) - 1)
     cells, occupancy, fallback = {}, {}, {}
     contributions = {}
 
@@ -427,6 +439,9 @@ def _voxelize(
         # Keep the denser detail grid within the former sampling memory budget.
         batch_size = max(1, 1_572_864 // sample_count)
         full_group = {appearance: (part, full_mask)} if extreme else None
+        # Groups belong to this source only. Both later overlay paths copy
+        # before mutation, so repeated partial cells can share their first group.
+        single_groups = {full_mask: full_group} if extreme else None
         for batch in candidate_batches(pmin, pmax, batch_size):
             if cancelled and cancelled():
                 raise Cancelled("Conversion cancelled")
@@ -457,21 +472,28 @@ def _voxelize(
                 ).reshape(-1, sample_count)
             packed = np.packbits(masks, axis=1, bitorder="little") if masks is not None else None
             for row, key in enumerate(keys):
-                bits = full_mask if packed is None else int.from_bytes(packed[row], "little")
+                bits = full_mask if packed is None else intern_mask(int.from_bytes(packed[row], "little"))
                 if bits:
                     previous = occupancy.get(key, 0)
                     occupancy[key] = (
-                        full_mask if bits == full_mask or previous == full_mask else previous | bits
+                        full_mask
+                        if bits == full_mask or previous == full_mask
+                        else bits if not previous else intern_mask(previous | bits)
                     )
                     cells.setdefault(key, part)
                     if extreme:
                         sampled.add(key)
-                        if key not in contributions and bits == full_mask:
-                            contributions[key] = full_group
+                        if key not in contributions:
+                            group = single_groups.get(bits)
+                            if group is None:
+                                group = {appearance: (part, bits)}
+                                if len(single_groups) < 256:
+                                    single_groups[bits] = group
+                            contributions[key] = group
                         else:
-                            # A shared full-wall group is immutable. Copy before
+                            # A shared single-source group is immutable. Copy before
                             # applying a later cell-local contributor or overlay.
-                            group = contributions.get(key, {}).copy()
+                            group = contributions[key].copy()
                             contributions[key] = group
                             record_contribution(group, part, appearance, bits)
         # Forward sampling protects small features that fall between target sample centers.
@@ -511,17 +533,27 @@ def _voxelize(
                     octants = (world_seeds - positions >= 0.5).astype(int) @ [4, 2, 1]
                     merge_seed_masks(seed_masks, positions - origin, octants, occupancy)
             for position, mask in seed_masks.items():
+                mask = intern_mask(mask)
                 if extreme:
-                    occupancy[position] = occupancy.get(position, 0) | mask
+                    previous = occupancy.get(position, 0)
+                    occupancy[position] = intern_mask(previous | mask) if previous else mask
                     cells.setdefault(position, part)
-                    group = contributions.get(position, {}).copy()
-                    contributions[position] = group
-                    record_contribution(group, part, appearance, mask)
+                    if position not in contributions:
+                        group = single_groups.get(mask)
+                        if group is None:
+                            group = {appearance: (part, mask)}
+                            if len(single_groups) < 256:
+                                single_groups[mask] = group
+                        contributions[position] = group
+                    else:
+                        group = contributions[position].copy()
+                        contributions[position] = group
+                        record_contribution(group, part, appearance, mask)
                     continue
                 previous, owner = fallback.get(position, (0, part))
                 if detailed:
                     mask = _detail_octants(mask)
-                fallback[position] = (previous | mask, owner)
+                fallback[position] = (intern_mask(previous | mask) if previous else mask, owner)
         if len(cells) > MAX_PARTS:
             raise ValueError(
                 f"Output exceeds {MAX_PARTS:,} occupied cells; choose a smaller scale or structure"

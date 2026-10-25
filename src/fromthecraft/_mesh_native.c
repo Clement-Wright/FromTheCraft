@@ -124,12 +124,12 @@ static int array_buffer(PyObject *obj, Py_buffer *view, int ndim, Py_ssize_t wid
     return 1;
 }
 
-static PyObject *sample_points_impl(PyObject *args, int axis_permutation) {
+static PyObject *sample_points_impl(PyObject *args, int axis_permutation, int table) {
     PyObject *objects[5], *answer = NULL;
     Py_buffer views[5] = {{0}};
     double scale;
-    if (!PyArg_ParseTuple(args, "OOOOdO", &objects[0], &objects[1], &objects[2], &objects[3],
-                          &scale, &objects[4])) return NULL;
+    if (!PyArg_ParseTuple(args, table ? "OOOOdOp" : "OOOOdO", &objects[0], &objects[1],
+                          &objects[2], &objects[3], &scale, &objects[4], &axis_permutation)) return NULL;
     if (!array_buffer(objects[0], &views[0], 2, 3, 1) ||
         !array_buffer(objects[1], &views[1], 2, 3, 0) ||
         !array_buffer(objects[2], &views[2], 2, 4, 0) ||
@@ -192,11 +192,65 @@ static PyObject *sample_points_impl(PyObject *args, int axis_permutation) {
     answer = PyBytes_FromStringAndSize(NULL, point_count * 3 * (Py_ssize_t)sizeof(double));
     if (!answer) goto cleanup;
     double *output = (double *)PyBytes_AS_STRING(answer);
+    /* The dense grids repeat at most 18 values on each axis. Reuse identical
+     * scalar expressions within one cell, including their original rounding.
+     * Bitwise keys distinguish signed zeros. No table survives this call. */
+    unsigned char sample_map[8192 * 3];
+    double unique[3][64];
+    int counts[3] = {0, 0, 0};
+    unsigned char slots[3][128] = {{0}};
+    table = table && sizeof(double) == sizeof(uint64_t) && sample_count >= 64 && sample_count <= 8192;
     /* Prepared meshes and discrete axes have a single nonzero product. Each dot has
      * exactly one nonzero product; adding +0 preserves its zero sign before
      * translation. Strict floating point keeps every division and multiply
      * separate, matching the NumPy pipeline without its full-size temporaries. */
     Py_BEGIN_ALLOW_THREADS
+    if (table) {
+        for (Py_ssize_t sample = 0; sample < sample_count && table; sample++) {
+            for (int axis = 0; axis < 3; axis++) {
+                double value = samples[sample * 3 + source_axis[axis]];
+                uint64_t hash;
+                memcpy(&hash, &value, sizeof(hash));
+                hash ^= hash >> 33;
+                hash *= UINT64_C(0xff51afd7ed558ccd);
+                hash ^= hash >> 33;
+                unsigned int slot = (unsigned int)hash & 127;
+                while (slots[axis][slot] && memcmp(&value, &unique[axis][slots[axis][slot] - 1], sizeof(double)))
+                    slot = (slot + 1) & 127;
+                int index = slots[axis][slot] ? slots[axis][slot] - 1 : counts[axis];
+                if (index == 64) { table = 0; break; }
+                if (index == counts[axis]) {
+                    unique[axis][counts[axis]++] = value;
+                    slots[axis][slot] = (unsigned char)(index + 1);
+                }
+                sample_map[sample * 3 + axis] = (unsigned char)index;
+            }
+        }
+    }
+    if (table) {
+        for (Py_ssize_t cell = 0; cell < cell_count; cell++) {
+            double values[3][64];
+            for (int axis = 0; axis < 3; axis++) {
+                int source = source_axis[axis];
+                for (int i = 0; i < counts[axis]; i++) {
+                    double value = (double)cells[cell * 3 + source] + unique[axis][i];
+                    value /= scale;
+                    value *= matrix[axis * 4 + source];
+                    value += 0.0;
+                    value += matrix[axis * 4 + 3];
+                    value /= size[axis];
+                    value *= span[axis];
+                    values[axis][i] = value;
+                }
+            }
+            for (Py_ssize_t sample = 0; sample < sample_count; sample++) {
+                double *out = output + (cell * sample_count + sample) * 3;
+                out[0] = values[0][sample_map[sample * 3]];
+                out[1] = values[1][sample_map[sample * 3 + 1]];
+                out[2] = values[2][sample_map[sample * 3 + 2]];
+            }
+        }
+    } else {
     for (Py_ssize_t cell = 0; cell < cell_count; cell++) {
         for (Py_ssize_t sample = 0; sample < sample_count; sample++) {
             for (int axis = 0; axis < 3; axis++) {
@@ -212,6 +266,7 @@ static PyObject *sample_points_impl(PyObject *args, int axis_permutation) {
             }
         }
     }
+    }
     Py_END_ALLOW_THREADS
 cleanup:
     for (int i = 0; i < 5; i++) if (views[i].obj) PyBuffer_Release(&views[i]);
@@ -219,11 +274,15 @@ cleanup:
 }
 
 static PyObject *sample_points(PyObject *self, PyObject *args) {
-    return sample_points_impl(args, 0);
+    return sample_points_impl(args, 0, 0);
 }
 
 static PyObject *axis_sample_points(PyObject *self, PyObject *args) {
-    return sample_points_impl(args, 1);
+    return sample_points_impl(args, 1, 0);
+}
+
+static PyObject *table_sample_points(PyObject *self, PyObject *args) {
+    return sample_points_impl(args, 0, 1);
 }
 
 static PyObject *contains_primitive(PyObject *self, PyObject *args) {
@@ -494,6 +553,7 @@ static PyMethodDef methods[] = {
     {"contains", contains, METH_VARARGS, "Classify a bounded batch using the original mesh tree."},
     {"sample_points", sample_points, METH_VARARGS, "Fuse bounded positive diagonal sample transforms."},
     {"axis_sample_points", axis_sample_points, METH_VARARGS, "Fuse bounded discrete-axis sample transforms."},
+    {"table_sample_points", table_sample_points, METH_VARARGS, "Reuse bit-identical repeated sample coordinates."},
     {"contains_primitive", contains_primitive, METH_VARARGS, "Filter exact primitive samples with conservative fallback."},
     {NULL, NULL, 0, NULL}
 };

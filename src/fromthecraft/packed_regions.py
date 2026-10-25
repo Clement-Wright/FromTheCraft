@@ -12,6 +12,7 @@ from litemapy import BlockState, Entity, Schematic, TileEntity
 
 AIR = {"minecraft:air", "minecraft:cave_air", "minecraft:void_air"}
 BATCH = 65536
+SPARSE_CANDIDATES = 4 * BATCH
 
 
 @dataclass
@@ -29,11 +30,51 @@ class PackedRegion:
     def minimum(self):
         return tuple(min(0, n + 1) for n in self.size)
 
+    def _sparse_values(self, air, width, height, length):
+        if not air[0]:
+            return None
+        # A zero word contains only palette zero, which is clean air here.
+        # Include every value touching a nonzero word, including values that
+        # start in its preceding word. Cap expansion before allocating indices.
+        per_word = (64 + self.nbits - 1) // self.nbits + 1
+        if np.count_nonzero(self.words) * per_word > SPARSE_CANDIDATES:
+            return None
+        active = np.flatnonzero(self.words)
+        candidates = ((active * 64 // self.nbits)[:, None] + np.arange(per_word)).ravel()
+        flat = np.unique(candidates[candidates < width * height * length])
+        bit = flat * self.nbits
+        word, shift = bit >> 6, (bit & 63).astype(np.uint64)
+        values = self.words[word] >> shift
+        split = shift + self.nbits > 64
+        values[split] |= self.words[word[split] + 1] << (64 - shift[split])
+        values &= np.uint64((1 << self.nbits) - 1)
+        valid = values < len(self.palette)
+        selected = ~valid
+        selected[valid] = ~air[values[valid]]
+        flat, values = flat[selected], values[selected]
+        # Packed storage is y/z/x; retain the original x/y/z iteration order.
+        # Invalid indices stay in this ordering so earlier states are yielded
+        # and validated by the caller before the original index error occurs.
+        x, z, y = flat % width, flat // width % length, flat // (width * length)
+        source = (x * height + y) * length + z
+        ordered = np.argsort(source)
+        return source[ordered], values[ordered]
+
     def blocks(self):
         width, height, length = (abs(n) for n in self.size)
         volume = width * height * length
         minimum = self.minimum
         air = np.array([block.id in AIR and not tuple(block.properties()) for block in self.palette])
+        sparse = self._sparse_values(air, width, height, length)
+        if sparse is not None:
+            positions, values = sparse
+            for flat, value in zip(positions, values):
+                if value >= len(self.palette):
+                    raise IndexError("list index out of range")
+                flat = int(flat)
+                x, y, z = flat // (height * length), flat // length % height, flat % length
+                yield (x + minimum[0], y + minimum[1], z + minimum[2]), self.palette[int(value)]
+            return
         mask = np.uint64((1 << self.nbits) - 1)
         for start in range(0, volume, BATCH):
             # Iteration stays x/y/z, matching Region.block_positions; packed
