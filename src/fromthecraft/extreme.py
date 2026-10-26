@@ -175,6 +175,13 @@ def material_partitions(target):
 
 @lru_cache(maxsize=2048)
 def surface_mask(mask):
+    if isinstance(mask, int) and 0 <= mask <= FULL_MASK:
+        volume = mask & VOLUME_MASK
+        interior = volume
+        for stride, (low_face, high_face) in zip((256, 16, 1), _VOLUME_FACES):
+            interior &= ((volume << stride) & ~low_face) & ((volume >> stride) & ~high_face)
+        return (volume & ~interior) | (mask & ~VOLUME_MASK)
+    # Preserve conversion errors and byte-compatible inputs outside the integer fast path.
     packed = np.frombuffer(mask.to_bytes((len(DETAIL_SAMPLES) + 7) // 8, "little"), dtype=np.uint8)
     volume = np.unpackbits(packed, bitorder="little")[:4096].reshape(16, 16, 16).astype(bool)
     padded = np.pad(volume, 1)
@@ -188,7 +195,7 @@ def surface_mask(mask):
 
 
 def paint_target(part, preference, mods, base):
-    from .palettes import mc_target
+    from .palettes import mc_target_material, mod_target
 
     target = part.state
     if not part.detail_sources:
@@ -203,7 +210,11 @@ def paint_target(part, preference, mods, base):
         covered |= mask
         if not visible:
             continue
-        material = mc_target(replace(source, shape="box", detail_sources=()), preference, mods)
+        material = source.mapping_override or mc_target_material(source, preference)
+        if not source.mapping_full and mods and source.mapping_override is None:
+            material = mod_target(
+                material, source.material, tuple(source.color), source.transparent, preference, mods
+            )
         materials[material] = materials.get(material, 0) | visible
     if len(materials) < 2:
         material = next(iter(materials), base)
@@ -223,21 +234,20 @@ def paint_target(part, preference, mods, base):
                 # mark repaint a whole byte, turning fine lines into patches.
                 count = shared.bit_count() + 8 * (shared & boundary).bit_count()
                 choices.append((count, material))
-        return max(choices, key=lambda item: item[0])[1] if choices else base
+        selected = max(choices, key=lambda item: item[0]) if choices else (0, base)
+        return selected
 
     partitions = []
     for candidate in material_partitions(target):
-        painted = tuple((slot, select(mask)) for slot, mask in slot_masks(candidate))
-        agreement = sum(
-            (materials.get(material, 0) & mask).bit_count()
-            + 8 * (materials.get(material, 0) & mask & boundary).bit_count()
-            for (slot, mask), (_, material) in zip(slot_masks(candidate), painted)
-        )
+        regions = slot_masks(candidate)
+        selected = tuple(select(mask) for _, mask in regions)
+        painted = tuple((slot, choice[1]) for (slot, _), choice in zip(regions, selected))
+        agreement = sum(choice[0] for choice in selected)
         partitions.append((candidate, painted, agreement))
     if partitions:
         target, painted, _ = max(partitions, key=lambda item: item[2])
         if len({material for _, material in painted}) > 1:
             return replace(target, copied_material=None, copied_materials=painted)
         return replace(target, copied_material=painted[0][1] if painted else base)
-    material = select(target_mask(target))
+    material = select(target_mask(target))[1]
     return replace(target, copied_material=material) if target else material

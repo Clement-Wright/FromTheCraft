@@ -110,8 +110,10 @@ def contains(shape, points):
                     mode = offset
                     break
         coefficients = np.asarray(clipping, dtype=float).reshape(-1, 4)
-        if len(coefficients) <= 64 and np.all(np.isfinite(coefficients)) and (
-            not coefficients.size or np.max(np.abs(coefficients)) <= 1e12
+        if (
+            len(coefficients) <= 64
+            and np.all(np.isfinite(coefficients))
+            and (not coefficients.size or np.max(np.abs(coefficients)) <= 1e12)
         ):
             occupied, uncertain = _mesh_native.contains_primitive(points, coefficients, mode)
             if not uncertain:
@@ -394,6 +396,13 @@ def _voxelize(
         # immutable values without retaining an unbounded set of sampled masks.
         return mask
 
+    @lru_cache(maxsize=256)
+    def aligned_transform(values):
+        # Source records commonly share one of 24 rotations. Cache the exact
+        # matrix bytes locally; translations and source ownership stay separate.
+        matrix = np.frombuffer(values, dtype=np.float64)
+        return np.allclose(matrix, np.round(matrix))
+
     full_mask = intern_mask((1 << sample_count) - 1)
     cells, occupancy, fallback = {}, {}, {}
     contributions = {}
@@ -422,9 +431,13 @@ def _voxelize(
         if np.any(pmax <= pmin):
             continue
         # Boxes on integer grid boundaries need no occupancy samples.
-        aligned = np.allclose(part.transform[:3, :3], np.round(part.transform[:3, :3]))
-        grid_box = np.allclose(world, np.round(world), rtol=0, atol=1e-7)
-        solid_box = part.shape == "box" and aligned and grid_box
+        matrix = part.transform[:3, :3]
+        aligned = (
+            aligned_transform(matrix.tobytes())
+            if matrix.dtype == np.float64
+            else np.allclose(matrix, np.round(matrix))
+        )
+        solid_box = part.shape == "box" and aligned and np.allclose(world, np.round(world), rtol=0, atol=1e-7)
         inv = None if solid_box else np.linalg.inv(part.transform)
         mesh_sampler = None
         sampled = set() if extreme else None
@@ -478,7 +491,9 @@ def _voxelize(
                     occupancy[key] = (
                         full_mask
                         if bits == full_mask or previous == full_mask
-                        else bits if not previous else intern_mask(previous | bits)
+                        else bits
+                        if not previous
+                        else intern_mask(previous | bits)
                     )
                     cells.setdefault(key, part)
                     if extreme:

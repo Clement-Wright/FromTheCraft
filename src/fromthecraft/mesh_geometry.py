@@ -2,10 +2,10 @@
 
 from dataclasses import replace
 from functools import lru_cache
-from concurrent.futures import TimeoutError
+from concurrent.futures import FIRST_COMPLETED, TimeoutError, wait
 
 import numpy as np
-from collections import OrderedDict, deque
+from collections import OrderedDict
 from copy import copy
 from os import cpu_count
 
@@ -290,12 +290,14 @@ class MeshSampler:
         return low, high, self._tree(order[:middle]), self._tree(order[middle:])
 
     def _parallel_contains(self, points):
-        """Schedule complete original query batches with at most one per worker."""
+        """Refill workers as complete original query batches finish."""
         # Build shared immutable coefficients before workers read them. Each
         # worker owns its budget counter and any lazy leaf-cache additions.
         self._native_arrays()
         starts = iter(range(0, len(points), 32768))
-        pending = deque()
+        pending = {}
+        completed_work = {}
+        next_work = 0
         result = np.empty(len(points), dtype=bool)
 
         def submit(start):
@@ -305,7 +307,7 @@ class MeshSampler:
             worker.executor, worker.cancelled, worker.work = None, None, 0
             worker.native_leaves = self.native_leaves.copy()
             future = self.executor.submit(worker.contains, points[start : start + 32768])
-            pending.append((start, worker, future))
+            pending[future] = start, worker
 
         try:
             for _ in range(self.native_threads):
@@ -314,35 +316,43 @@ class MeshSampler:
                     break
                 submit(start)
             while pending:
-                start, worker, future = pending[0]
-                while True:
-                    if self.cancelled and self.cancelled():
-                        raise Cancelled("Conversion cancelled")
+                if self.cancelled and self.cancelled():
+                    raise Cancelled("Conversion cancelled")
+                ready = []
+                for future, (start, worker) in pending.items():
                     try:
-                        answer = future.result(timeout=0.05)
-                        break
+                        future.result(timeout=0)
                     except TimeoutError:
-                        if future.done():
-                            # Completion can race the polling timeout. Read the
-                            # actual result, including a worker-raised timeout.
-                            answer = future.result()
-                            break
-                        for _start, _worker, other in pending:
-                            if other.done() and (other.cancelled() or other.exception() is not None):
-                                other.result()
-                        continue
-                self.work += worker.work
-                if self.work > MAX_MESH_SAMPLE_WORK:
-                    raise ValueError(
-                        "Decorative mesh sampling budget exceeded; choose a smaller scale or structure-only mode"
-                    )
-                result[start : start + len(answer)] = answer
-                pending.popleft()
-                start = next(starts, None)
-                if start is not None:
-                    submit(start)
+                        if not future.done():
+                            continue
+                    except Exception:
+                        if not future.done():
+                            raise
+                    # Retrieve failures in submission order below, after any
+                    # ready earlier batch has enforced its original work budget.
+                    ready.append((future, start, worker))
+                if not ready:
+                    wait(pending, timeout=0.05, return_when=FIRST_COMPLETED)
+                    continue
+                for future, start, worker in ready:
+                    answer = future.result()
+                    del pending[future]
+                    result[start : start + len(answer)] = answer
+                    # Completed masks need no reorder buffer. Only tiny work
+                    # totals wait for preceding batches, preserving budget order.
+                    completed_work[start] = worker.work
+                    while next_work in completed_work:
+                        self.work += completed_work.pop(next_work)
+                        next_work += 32768
+                        if self.work > MAX_MESH_SAMPLE_WORK:
+                            raise ValueError(
+                                "Decorative mesh sampling budget exceeded; choose a smaller scale or structure-only mode"
+                            )
+                    start = next(starts, None)
+                    if start is not None:
+                        submit(start)
         finally:
-            for _start, _worker, future in pending:
+            for future in pending:
                 future.cancel()
         return result
 
