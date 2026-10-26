@@ -83,6 +83,9 @@ def vector(text, length=3):
     return values
 
 
+MAX_CONSTRUCT_DEPTH = 128
+
+
 def read_blueprint(content: bytes) -> Scene:
     if len(content) > 32 * 1024**2:
         raise ValueError("Blueprint exceeds 32 MiB")
@@ -102,8 +105,8 @@ def read_blueprint(content: bytes) -> Scene:
 
     def visit(construct, parent, depth, path=("Blueprint",)):
         nonlocal records, mesh_triangles
-        if depth > 32:
-            raise ValueError("Blueprint construct nesting exceeds 32")
+        if depth > MAX_CONSTRUCT_DEPTH:
+            raise ValueError(f"Blueprint construct nesting exceeds {MAX_CONSTRUCT_DEPTH}")
         transform = parent.copy()
         if depth:
             local = np.eye(4)
